@@ -29,6 +29,18 @@ create_user_backup_archive() {
     fi
     chmod 600 "$manual_locks_file" 2>/dev/null || true
 
+    if [[ -f "/etc/xray/users.json" ]]; then
+        cp "/etc/xray/users.json" "$backup_root/xray_users.json" 2>/dev/null || true
+    fi
+    if [[ -d "/etc/pgy-adblock" ]]; then
+        mkdir -p "$backup_root/adblock"
+        cp -a /etc/pgy-adblock/* "$backup_root/adblock/" 2>/dev/null || true
+    fi
+    if [[ -f "/etc/wireproxy/config.conf" ]]; then
+        mkdir -p "$backup_root/wireproxy"
+        cp -a /etc/wireproxy/* "$backup_root/wireproxy/" 2>/dev/null || true
+    fi
+
     # Keep locks.db for older restore implementations, but derive it from the
     # explicit operator policy rather than conflated Linux shadow state.
     : > "$locks_file"
@@ -147,6 +159,34 @@ restore_user_data() {
         echo -e "\n${C_RED}[ERROR] Manual lock policy could not be restored safely.${C_RESET}"
         return
     fi
+
+    if [[ -f "$restore_root/xray_users.json" ]]; then
+        mkdir -p /etc/xray
+        cp "$restore_root/xray_users.json" /etc/xray/users.json
+        if systemctl is-active --quiet xray 2>/dev/null; then
+            systemctl restart xray 2>/dev/null || true
+        fi
+        echo -e "  ${C_GRAY}•${C_RESET} XRay User Database: ${C_GREEN}Restored & Reloaded${C_RESET}"
+    fi
+
+    if [[ -d "$restore_root/adblock" ]]; then
+        mkdir -p /etc/pgy-adblock
+        cp -a "$restore_root/adblock"/* /etc/pgy-adblock/ 2>/dev/null || true
+        if systemctl is-active --quiet dnsmasq 2>/dev/null; then
+            systemctl restart dnsmasq 2>/dev/null || true
+        fi
+        echo -e "  ${C_GRAY}•${C_RESET} Adblock Database: ${C_GREEN}Restored & Reloaded${C_RESET}"
+    fi
+
+    if [[ -d "$restore_root/wireproxy" ]]; then
+        mkdir -p /etc/wireproxy
+        cp -a "$restore_root/wireproxy"/* /etc/wireproxy/ 2>/dev/null || true
+        if systemctl is-active --quiet wireproxy 2>/dev/null; then
+            systemctl restart wireproxy 2>/dev/null || true
+        fi
+        echo -e "  ${C_GRAY}•${C_RESET} Cloudflare WARP Config: ${C_GREEN}Restored & Reloaded${C_RESET}"
+    fi
+
     rm -rf "$temp_dir"
     echo -e "\n${C_GREEN}[OK] User data restore completed.${C_RESET}"
     

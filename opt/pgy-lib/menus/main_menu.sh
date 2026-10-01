@@ -51,6 +51,15 @@ DASH_CACHE_RAM_USED=$(printf '%q' "${DASH_CACHE_RAM_USED:-0 / 0}")
 DASH_CACHE_DISK_PCT=$(printf '%q' "${DASH_CACHE_DISK_PCT:-0}")
 DASH_CACHE_TOTAL_USERS=${DASH_CACHE_TOTAL_USERS:-0}
 DASH_CACHE_ONLINE_USERS=${DASH_CACHE_ONLINE_USERS:-0}
+DASH_CACHE_VMESS_USERS=${DASH_CACHE_VMESS_USERS:-0}
+DASH_CACHE_VLESS_USERS=${DASH_CACHE_VLESS_USERS:-0}
+DASH_CACHE_TROJAN_USERS=${DASH_CACHE_TROJAN_USERS:-0}
+DASH_CACHE_SSWS_USERS=${DASH_CACHE_SSWS_USERS:-0}
+DASH_CACHE_SSH_USERS=${DASH_CACHE_SSH_USERS:-0}
+DASH_CACHE_BW_TODAY=$(printf '%q' "${DASH_CACHE_BW_TODAY:-0.00 GiB}")
+DASH_CACHE_BW_YESTERDAY=$(printf '%q' "${DASH_CACHE_BW_YESTERDAY:-0.00 GiB}")
+DASH_CACHE_BW_MONTH=$(printf '%q' "${DASH_CACHE_BW_MONTH:-0.00 GiB}")
+DASH_CACHE_BW_TOTAL=$(printf '%q' "${DASH_CACHE_BW_TOTAL:-0.00 GiB}")
 DASH_CACHE_LOCATION=$(printf '%q' "${DASH_CACHE_LOCATION:-N/A}")
 DASH_CACHE_ISP=$(printf '%q' "${DASH_CACHE_ISP:-N/A}")
 DASH_CACHE_PUBLIC_IP=$(printf '%q' "${DASH_CACHE_PUBLIC_IP:-N/A}")
@@ -123,11 +132,29 @@ main_menu() {
         pgy_box_divider
         pgy_kv2 "OS"     "${DASH_CACHE_OS_NAME:0:22}"   "UPTIME" "${DASH_CACHE_UPTIME:0:24}"
         pgy_kv2 "CPU"    "${_cpu_val:0:22}"             "RAM"    "${_ram_val:0:24}"
-        pgy_box_divider
-        pgy_kv2 "ACCT"   "${DASH_CACHE_TOTAL_USERS} total" "ONLINE" "${DASH_CACHE_ONLINE_USERS} now"
         pgy_box_bot
 
-        # ── SECTION 2: SERVICE STATUS (live indicators) ───────────────
+        # ── SECTION 2: BANDWIDTH USAGE ──
+        echo
+        pgy_box_top
+        pgy_box_header "BANDWIDTH USAGE"
+        pgy_box_divider
+        pgy_kv2 "TODAY"  "${DASH_CACHE_BW_TODAY:-0.00 GiB}"  "YESTERDAY" "${DASH_CACHE_BW_YESTERDAY:-0.00 GiB}"
+        pgy_kv2 "MONTH"  "${DASH_CACHE_BW_MONTH:-0.00 GiB}"  "TOTAL"     "${DASH_CACHE_BW_TOTAL:-0.00 GiB}"
+        pgy_box_bot
+
+        # ── SECTION 3: USER & TRAFFIC STATS ──
+        echo
+        pgy_box_top
+        pgy_box_header "USER & TRAFFIC STATS"
+        pgy_box_divider
+        pgy_kv2 "VMESS"  "${DASH_CACHE_VMESS_USERS:-0} users"  "VLESS"  "${DASH_CACHE_VLESS_USERS:-0} users"
+        pgy_kv2 "TROJAN" "${DASH_CACHE_TROJAN_USERS:-0} users" "SSH/WS" "${DASH_CACHE_SSH_USERS:-0} users"
+        pgy_box_divider
+        pgy_kv2 "TOTAL"  "${DASH_CACHE_TOTAL_USERS:-0} accounts" "ONLINE" "${DASH_CACHE_ONLINE_USERS:-0} sessions"
+        pgy_box_bot
+
+        # ── SECTION 4: SERVICE STATUS (live indicators) ───────────────
         local act_xray=false act_nginx=false act_haprx=false act_ws=false
         local act_badvpn=false act_warp=false act_dnstt=false act_adblock=false
         if systemctl is-active --quiet xray 2>/dev/null; then act_xray=true; fi
@@ -149,7 +176,7 @@ main_menu() {
         pgy_svc2 "SLOWDNS" "$act_dnstt" "ADBLOCK" "$act_adblock"
         pgy_box_bot
 
-        # ── SECTION 3: USER MANAGEMENT ────────────────────────────────
+        # ── SECTION 5: USER MANAGEMENT ────────────────────────────────
         echo
         pgy_box_top
         pgy_box_header "USER MANAGEMENT"
@@ -157,7 +184,7 @@ main_menu() {
         pgy_menu2 "[ 1]" "SSH User Manager" "[ 2]" "XRay User Manager"
         pgy_box_bot
 
-        # ── SECTION 4: VPN & PROTOCOLS ────────────────────────────────
+        # ── SECTION 6: VPN & PROTOCOLS ────────────────────────────────
         echo
         pgy_box_top
         pgy_box_header "VPN & PROTOCOLS"

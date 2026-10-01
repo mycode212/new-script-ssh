@@ -37,6 +37,15 @@ DASH_CACHE_LOCATION="N/A"
 DASH_CACHE_ISP="N/A"
 DASH_CACHE_PUBLIC_IP="N/A"
 DASH_CACHE_DOMAIN="None"
+DASH_CACHE_BW_TODAY="0.00 GiB"
+DASH_CACHE_BW_YESTERDAY="0.00 GiB"
+DASH_CACHE_BW_MONTH="0.00 GiB"
+DASH_CACHE_BW_TOTAL="0.00 GiB"
+DASH_CACHE_VMESS_USERS=0
+DASH_CACHE_VLESS_USERS=0
+DASH_CACHE_TROJAN_USERS=0
+DASH_CACHE_SSWS_USERS=0
+DASH_CACHE_SSH_USERS=0
 
 refresh_ssh_session_cache() {
     local now db_mtime
@@ -284,13 +293,16 @@ refresh_dashboard_cache() {
     # Disk
     DASH_CACHE_DISK_PCT=$(df / 2>/dev/null | awk 'NR==2{gsub(/%/,""); print $5}' || echo "0")
 
-    # User counts
-    if [[ -s "$DB_FILE" ]]; then
-        DASH_CACHE_TOTAL_USERS=$(grep -c . "$DB_FILE")
-    else
-        DASH_CACHE_TOTAL_USERS=0
-    fi
+    # User counts (SSH & XRay Multi-protocol)
+    local u_counts
+    u_counts=$(pgy_get_user_counts)
+    IFS='|' read -r DASH_CACHE_VMESS_USERS DASH_CACHE_VLESS_USERS DASH_CACHE_TROJAN_USERS DASH_CACHE_SSWS_USERS DASH_CACHE_SSH_USERS DASH_CACHE_TOTAL_USERS <<< "$u_counts"
     DASH_CACHE_ONLINE_USERS=$(count_managed_online_sessions)
+
+    # Bandwidth statistics (Today, Yesterday, Month, Total)
+    local bw_raw
+    bw_raw=$(pgy_get_bandwidth_stats)
+    IFS='|' read -r DASH_CACHE_BW_TODAY DASH_CACHE_BW_YESTERDAY DASH_CACHE_BW_MONTH DASH_CACHE_BW_TOTAL <<< "$bw_raw"
 
     # Custom domain (from edge_cert.conf, set by Domain & SSL menu)
     local domain=""
@@ -321,6 +333,107 @@ refresh_dashboard_cache() {
     fi
 
     DASH_CACHE_TS=$now
+}
+
+pgy_get_bandwidth_stats() {
+    local today="0.00 GiB" yesterday="0.00 GiB" month="0.00 GiB" total="0.00 GiB"
+    if command -v vnstat >/dev/null 2>&1; then
+        local vn_json
+        vn_json="$(vnstat --json 2>/dev/null || true)"
+        if [[ -n "$vn_json" ]]; then
+            if command -v jq >/dev/null 2>&1; then
+                today="$(echo "${vn_json}" | jq -r '.interfaces[0].traffic.day[0].rx + .interfaces[0].traffic.day[0].tx | if . then (. / 1073741824 | tostring | .[0:4] + " GiB") else "0.00 GiB" end' 2>/dev/null || echo "0.00 GiB")"
+                yesterday="$(echo "${vn_json}" | jq -r '.interfaces[0].traffic.day[1].rx + .interfaces[0].traffic.day[1].tx | if . then (. / 1073741824 | tostring | .[0:4] + " GiB") else "0.00 GiB" end' 2>/dev/null || echo "0.00 GiB")"
+                month="$(echo "${vn_json}" | jq -r '.interfaces[0].traffic.month[0].rx + .interfaces[0].traffic.month[0].tx | if . then (. / 1073741824 | tostring | .[0:4] + " GiB") else "0.00 GiB" end' 2>/dev/null || echo "0.00 GiB")"
+                total="$(echo "${vn_json}" | jq -r '.interfaces[0].traffic.total.rx + .interfaces[0].traffic.total.tx | if . then (. / 1073741824 | tostring | .[0:4] + " GiB") else "0.00 GiB" end' 2>/dev/null || echo "0.00 GiB")"
+            else
+                local py_res
+                py_res="$(python3 -c "
+import json, sys
+try:
+    data = json.loads('''$vn_json''')
+    iface = data['interfaces'][0]['traffic']
+    def fmt(b):
+        return f'{b/1073741824:.2f} GiB' if b else '0.00 GiB'
+    d = iface.get('day', [])
+    t_d0 = (d[0]['rx'] + d[0]['tx']) if len(d) > 0 else 0
+    t_d1 = (d[1]['rx'] + d[1]['tx']) if len(d) > 1 else 0
+    m = iface.get('month', [])
+    t_m0 = (m[0]['rx'] + m[0]['tx']) if len(m) > 0 else 0
+    tot = iface.get('total', {})
+    t_tot = (tot.get('rx', 0) + tot.get('tx', 0))
+    print(f'{fmt(t_d0)}|{fmt(t_d1)}|{fmt(t_m0)}|{fmt(t_tot)}')
+except Exception:
+    print('0.00 GiB|0.00 GiB|0.00 GiB|0.00 GiB')
+" 2>/dev/null || echo "0.00 GiB|0.00 GiB|0.00 GiB|0.00 GiB")"
+                IFS='|' read -r today yesterday month total <<< "$py_res"
+            fi
+        fi
+    fi
+
+    # Fallback to /proc/net/dev if total is still 0.00 GiB or vnstat not installed
+    if [[ "$total" == "0.00 GiB" || -z "$total" ]]; then
+        local rx=0 tx=0
+        if [[ -r /proc/net/dev ]]; then
+            while read -r line; do
+                if [[ "${line}" =~ ^[[:space:]]*(eth0|ens|enp|eth1|venet0) ]]; then
+                    local r_bytes t_bytes
+                    r_bytes="$(echo "${line}" | awk '{print $2}')"
+                    t_bytes="$(echo "${line}" | awk '{print $10}')"
+                    rx=$(( rx + r_bytes ))
+                    tx=$(( tx + t_bytes ))
+                fi
+            done < /proc/net/dev
+        fi
+        local sum_bytes=$(( rx + tx ))
+        if (( sum_bytes > 0 )); then
+            local gib
+            gib="$(awk -v b="${sum_bytes}" 'BEGIN{printf "%.2f GiB", b/1073741824}')"
+            today="${gib}"
+            yesterday="0.00 GiB"
+            month="${gib}"
+            total="${gib}"
+        fi
+    fi
+
+    [[ -n "${today}" && "${today}" != "null" ]] || today="0.00 GiB"
+    [[ -n "${yesterday}" && "${yesterday}" != "null" ]] || yesterday="0.00 GiB"
+    [[ -n "${month}" && "${month}" != "null" ]] || month="0.00 GiB"
+    [[ -n "${total}" && "${total}" != "null" ]] || total="0.00 GiB"
+    echo "${today}|${yesterday}|${month}|${total}"
+}
+
+pgy_get_user_counts() {
+    local vmess_c=0 vless_c=0 trojan_c=0 ssws_c=0 ssh_c=0 total_c=0
+    local xray_db="/etc/xray/users.json"
+    if [[ -f "$xray_db" ]]; then
+        if command -v jq >/dev/null 2>&1; then
+            vmess_c=$(jq -r '[.[] | select(.proto == "vmess")] | length' "$xray_db" 2>/dev/null || echo 0)
+            vless_c=$(jq -r '[.[] | select(.proto == "vless")] | length' "$xray_db" 2>/dev/null || echo 0)
+            trojan_c=$(jq -r '[.[] | select(.proto == "trojan")] | length' "$xray_db" 2>/dev/null || echo 0)
+        else
+            local counts
+            counts=$(python3 -c "
+import json
+try:
+    db = json.load(open('$xray_db'))
+    vm = len([u for u in db if u.get('proto') == 'vmess'])
+    vl = len([u for u in db if u.get('proto') == 'vless'])
+    tr = len([u for u in db if u.get('proto') == 'trojan'])
+    print(f'{vm}|{vl}|{tr}')
+except Exception:
+    print('0|0|0')
+" 2>/dev/null || echo "0|0|0")
+            IFS='|' read -r vmess_c vless_c trojan_c <<< "$counts"
+        fi
+    fi
+
+    if [[ -s "$DB_FILE" ]]; then
+        ssh_c=$(grep -v '^#' "$DB_FILE" 2>/dev/null | grep -c . || echo 0)
+    fi
+
+    total_c=$(( vmess_c + vless_c + trojan_c + ssws_c + ssh_c ))
+    echo "${vmess_c}|${vless_c}|${trojan_c}|${ssws_c}|${ssh_c}|${total_c}"
 }
 
 

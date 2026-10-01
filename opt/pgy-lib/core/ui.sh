@@ -7,22 +7,76 @@
 # Box Drawing Tokens
 PGY_CURRENT_BOX_OPEN=false
 PGY_CURRENT_BOX_COLOR="$C_CYAN"
+PGY_CURRENT_BOX_ROUNDED=false
 
 pgy_box_close_if_open() {
     if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
-        printf "  %s╚" "${PGY_CURRENT_BOX_COLOR:-$C_CYAN}"
-        printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
-        printf "╝%s\n" "$C_RESET"
+        if [[ "${PGY_CURRENT_BOX_ROUNDED:-false}" == "true" ]]; then
+            printf "  %s╰" "${PGY_CURRENT_BOX_COLOR:-$C_CYAN}"
+            printf '─%.0s' $(seq 1 "$PGY_BOX_WIDTH")
+            printf "╯%s\n" "$C_RESET"
+            PGY_CURRENT_BOX_ROUNDED=false
+        else
+            printf "  %s╚" "${PGY_CURRENT_BOX_COLOR:-$C_CYAN}"
+            printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
+            printf "╝%s\n" "$C_RESET"
+        fi
         PGY_CURRENT_BOX_OPEN=false
     fi
 }
 tdz_box_close_if_open() { pgy_box_close_if_open "$@"; }
+
+pgy_rbox_top_title() {
+    local title="$1" color="${2:-$C_CYAN}"
+    pgy_box_close_if_open
+    PGY_CURRENT_BOX_COLOR="$color"
+    PGY_CURRENT_BOX_OPEN=true
+    PGY_CURRENT_BOX_ROUNDED=true
+    local title_str="[ ${title} ]"
+    local total_w=$PGY_BOX_WIDTH
+    local t_len=${#title_str}
+    local left_pad=$(( (total_w - t_len) / 2 ))
+    local right_pad=$(( total_w - t_len - left_pad ))
+    
+    printf "  %s╭" "$color"
+    printf '─%.0s' $(seq 1 "$left_pad")
+    printf "%s" "$title_str"
+    printf '─%.0s' $(seq 1 "$right_pad")
+    printf "╮%s\n" "$C_RESET"
+}
+tdz_rbox_top_title() { pgy_rbox_top_title "$@"; }
+
+pgy_rbox_bot() {
+    local color="${1:-${PGY_CURRENT_BOX_COLOR:-$C_CYAN}}"
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
+        printf "  %s╰" "$color"
+        printf '─%.0s' $(seq 1 "$PGY_BOX_WIDTH")
+        printf "╯%s\n" "$C_RESET"
+        PGY_CURRENT_BOX_OPEN=false
+        PGY_CURRENT_BOX_ROUNDED=false
+    fi
+}
+tdz_rbox_bot() { pgy_rbox_bot "$@"; }
+
+pgy_rbox_row() {
+    local content="$1" color="${2:-${PGY_CURRENT_BOX_COLOR:-$C_CYAN}}"
+    local max_inner=$(( PGY_BOX_WIDTH - 2 ))
+    local clean cw
+    clean=$(_pgy_strip_ansi "$content")
+    cw=${#clean}
+    local pad=$(( max_inner - cw ))
+    local spaces=""
+    (( pad > 0 )) && printf -v spaces "%${pad}s" ""
+    printf "  %s│%s %s%s %s│%s\n" "$color" "$C_RESET" "$content" "$spaces" "$color" "$C_RESET"
+}
+tdz_rbox_row() { pgy_rbox_row "$@"; }
 
 pgy_box_top() {
     local color="${1:-$C_CYAN}"
     pgy_box_close_if_open
     PGY_CURRENT_BOX_COLOR="$color"
     PGY_CURRENT_BOX_OPEN=true
+    PGY_CURRENT_BOX_ROUNDED=false
     printf "  %s╔" "$color"
     printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
     printf "╗%s\n" "$C_RESET"
@@ -32,9 +86,16 @@ tdz_box_top() { pgy_box_top "$@"; }
 pgy_box_bot() {
     local color="${1:-${PGY_CURRENT_BOX_COLOR:-$C_CYAN}}"
     if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
-        printf "  %s╚" "$color"
-        printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
-        printf "╝%s\n" "$C_RESET"
+        if [[ "${PGY_CURRENT_BOX_ROUNDED:-false}" == "true" ]]; then
+            printf "  %s╰" "$color"
+            printf '─%.0s' $(seq 1 "$PGY_BOX_WIDTH")
+            printf "╯%s\n" "$C_RESET"
+            PGY_CURRENT_BOX_ROUNDED=false
+        else
+            printf "  %s╚" "$color"
+            printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
+            printf "╝%s\n" "$C_RESET"
+        fi
         PGY_CURRENT_BOX_OPEN=false
     fi
 }
