@@ -60,57 +60,58 @@ pgy_warp_install_binaries() {
 
 pgy_warp_generate_config() {
     local target_key="${1:-}"
-    local gen_dir="/tmp/pgy-wgcf-gen-$$"
-    mkdir -p "$gen_dir"
-    cd "$gen_dir" || return 1
+    local wgcf_dir="/etc/wgcf"
+    mkdir -p "$wgcf_dir" "$WARP_DIR"
+    cd "$wgcf_dir" || return 1
 
-    echo -e "${C_INFO}  Mendaftarkan akun Cloudflare WARP...${C_RESET}"
-    wgcf register --accept-tos >/dev/null 2>&1 || true
+    echo -e "${C_INFO}  Mendaftarkan akun Cloudflare WARP via wgcf...${C_RESET}"
+    if [[ ! -f "wgcf-account.toml" ]]; then
+        yes | wgcf register >/tmp/wgcf-register.log 2>&1 || true
+        if [[ ! -f "wgcf-account.toml" ]]; then
+            echo -e "${C_ERR}  Gagal mendaftarkan akun Cloudflare (Rate Limit / Network). Detail:${C_RESET}"
+            tail -n 10 /tmp/wgcf-register.log 2>/dev/null || true
+            return 1
+        fi
+    fi
 
     if [[ -n "$target_key" ]]; then
         echo -e "${C_INFO}  Menerapkan License Key WARP+...${C_RESET}"
-        # Update license in wgcf-account.toml
         sed -i "s/license_key = .*/license_key = '${target_key}'/" wgcf-account.toml 2>/dev/null || true
         wgcf update >/dev/null 2>&1 || true
     fi
 
-    echo -e "${C_INFO}  Membuat konfigurasi WireGuard...${C_RESET}"
-    wgcf generate >/dev/null 2>&1 || true
+    echo -e "${C_INFO}  Membuat profil WireGuard...${C_RESET}"
+    wgcf generate >/tmp/wgcf-generate.log 2>&1 || true
 
     if [[ ! -f "wgcf-profile.conf" ]]; then
-        echo -e "${C_ERR}  Gagal men-generate profil WARP dari Cloudflare.${C_RESET}"
-        cd /root && rm -rf "$gen_dir"
+        echo -e "${C_ERR}  Gagal men-generate profil wgcf-profile.conf.${C_RESET}"
+        tail -n 10 /tmp/wgcf-generate.log 2>/dev/null || true
         return 1
     fi
 
-    # Convert wgcf-profile.conf to wireproxy format
-    local priv_key pub_key address4 address6 endpoint
-    priv_key=$(grep -i '^PrivateKey' wgcf-profile.conf | awk '{print $3}')
-    address4=$(grep -i '^Address' wgcf-profile.conf | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-    address6=$(grep -i '^Address' wgcf-profile.conf | grep -oE '[a-fA-F0-9:]+/[0-9]+' | head -n1)
-    pub_key=$(grep -i '^PublicKey' wgcf-profile.conf | awk '{print $3}')
-    endpoint=$(grep -i '^Endpoint' wgcf-profile.conf | awk '{print $3}')
+    echo -e "${C_INFO}  Menyusun konfigurasi Wireproxy...${C_RESET}"
+    cp -f "${wgcf_dir}/wgcf-profile.conf" "${WARP_CONF}"
 
-    [[ -z "$endpoint" ]] && endpoint="engage.cloudflareclient.com:2408"
+    # Hapus section Socks/Socks5 lama jika ada dan tambahkan section Socks5 resmi
+    local wp_tmp
+    wp_tmp="$(mktemp /tmp/wireproxy.XXXXXX)"
+    awk '
+        BEGIN { drop=0 }
+        /^\[(Socks|Socks5)\]$/ { drop=1; next }
+        /^\[.*\]$/ { drop=0 }
+        drop { next }
+        { print }
+    ' "$WARP_CONF" > "$wp_tmp"
 
-    mkdir -p "$WARP_DIR"
-    cat <<EOF > "$WARP_CONF"
-# Cloudflare WARP Wireproxy Configuration (ProgoCloud)
-[Interface]
-PrivateKey = ${priv_key}
-Address = ${address4:-172.16.0.2}/32, ${address6:-fd01:5ca1:ab1e:8001::2/128}
-DNS = 1.1.1.1, 1.0.0.1
-
-[Peer]
-PublicKey = ${pub_key:-bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=}
-Endpoint = ${endpoint}
-KeepAlive = 25
+    cat >> "$wp_tmp" <<EOF
 
 [Socks5]
 BindAddress = 127.0.0.1:${WARP_SOCKS_PORT}
 EOF
-    chmod 600 "$WARP_CONF"
-    cd /root && rm -rf "$gen_dir"
+
+    install -m 600 "$wp_tmp" "$WARP_CONF"
+    rm -f "$wp_tmp" /tmp/wgcf-register.log /tmp/wgcf-generate.log
+    echo -e "${C_GREEN}  Konfigurasi ${WARP_CONF} berhasil dibuat.${C_RESET}"
     return 0
 }
 
@@ -135,6 +136,14 @@ EOF
     systemctl daemon-reload >/dev/null 2>&1 || true
     systemctl enable wireproxy.service >/dev/null 2>&1 || true
     systemctl restart wireproxy.service >/dev/null 2>&1 || true
+    sleep 1.5
+
+    if ! systemctl is-active --quiet wireproxy.service; then
+        echo -e "${C_ERR}  wireproxy.service gagal berjalan. Log systemd:${C_RESET}"
+        journalctl -u wireproxy.service -n 15 --no-pager 2>/dev/null || true
+        return 1
+    fi
+    return 0
 }
 
 pgy_warp_is_active() {
