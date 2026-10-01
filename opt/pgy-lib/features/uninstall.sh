@@ -203,8 +203,9 @@ pgy_uninstall_application_files() {
     local diagnostic
     rm -f "$AUTO_BACKUP_CONF" "$AUTO_BACKUP_SCRIPT" "$AUTO_BACKUP_LOG"
     rm -rf "$AUTO_BACKUP_DIR" "$BADVPN_BUILD_DIR"
-    rm -rf "$DB_DIR" "$PGY_LIB_DIR"
+    rm -rf "$DB_DIR" "$PGY_LIB_DIR" "$PGY_OPT_LIB_DIR" "/pgy-lib" "$PGY_LICENSE_STATE_DIR"
     rm -f "$WS_SSH_BRIDGE_SCRIPT" "$WS_SSH_BRIDGE_SERVICE"
+    rm -f "/usr/local/bin/pgy" "/usr/local/bin/pgy-update" "/usr/local/bin/pgy-license-check"
     for diagnostic in "$PGY_PACKAGE_LOG" "$PGY_CERTIFICATE_LOG" "$PGY_SERVICE_LOG" \
         "${PGY_OVPN_DIAG_LOG:-/var/log/pgy-openvpn-setup.log}"; do
         if [[ -s "$diagnostic" ]]; then
@@ -219,7 +220,7 @@ pgy_uninstall_application_files() {
 pgy_verify_uninstall_cleanup() {
     local path unit
     local -a leftovers=() managed_paths=(
-        "$DB_DIR" "$PGY_LIB_DIR" \
+        "$DB_DIR" "$PGY_LIB_DIR" "$PGY_OPT_LIB_DIR" \
         "$LIMITER_SERVICE" "$LIMITER_SCRIPT" "$BANDWIDTH_SERVICE" "$BANDWIDTH_SCRIPT" \
         "$TRIAL_CLEANUP_SCRIPT" "$SSHD_PGY_CONFIG" "$SSH_AUTH_SESSION_DIR" \
         "$SSH_BANNER_FILE" "$LOGIN_INFO_SCRIPT" \
@@ -250,7 +251,7 @@ pgy_verify_uninstall_cleanup() {
         badvpn dnstt zivpn haproxy nginx udp-custom udpgw tdzproxy \
         pgy-openvpn-network pgy-openvpn-tcp pgy-openvpn-udp pgy-openvpn-http \
         pgy-openvpn-wss pgy-openvpn-ssl pgy-openvpn-portal pgy-openvpn-accounting; do
-        if systemctl is-active --quiet "$unit.service"; then
+        if systemctl is-active --quiet "$unit.service" 2>/dev/null; then
             leftovers+=("active service: $unit.service")
         fi
     done
@@ -259,7 +260,7 @@ pgy_verify_uninstall_cleanup() {
         printf '  %s\n' "${leftovers[@]}" >> "$PGY_UNINSTALL_LOG"
         return 1
     fi
-    rm -f "$PGY_MENU_BINARY" || return 1
+    rm -f "$PGY_MENU_BINARY" "/usr/local/bin/pgy" "/usr/local/bin/pgy-update" "/usr/local/bin/pgy-license-check" || return 1
     [[ ! -e "$PGY_MENU_BINARY" && ! -L "$PGY_MENU_BINARY" ]]
 }
 

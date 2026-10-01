@@ -250,13 +250,28 @@ pgy_progress_failed() {
 tdz_progress_failed() { pgy_progress_failed "$@"; }
 
 pgy_progress_run() {
-    local text="$1"
-    shift
-    if "$@" >/dev/null 2>&1; then
-        pgy_progress_done "$text"
+    local step_num="" total_steps="" label=""
+    if [[ "$1" =~ ^[0-9]+$ && "$2" =~ ^[0-9]+$ ]]; then
+        step_num="$1"
+        total_steps="$2"
+        label="$3"
+        shift 3
+    else
+        label="$1"
+        shift 1
+    fi
+
+    local display_text="$label"
+    if [[ -n "$step_num" && -n "$total_steps" ]]; then
+        display_text="[${step_num}/${total_steps}] ${label}"
+    fi
+
+    local pgy_log="${PGY_ACTION_LOG:-${TDZ_ACTION_LOG:-/dev/null}}"
+    if "$@" >> "$pgy_log" 2>&1; then
+        pgy_progress_done "$display_text"
         return 0
     else
-        pgy_progress_failed "$text"
+        pgy_progress_failed "$display_text"
         return 1
     fi
 }
