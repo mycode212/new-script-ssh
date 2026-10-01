@@ -29,11 +29,15 @@ protocol_menu() {
 
         local warp_status="Inactive" warp_color="$C_RED"
         local adblock_status="Inactive" adblock_color="$C_RED"
+        local xray_status="Inactive" xray_color="$C_RED"
         if declare -F pgy_warp_is_active >/dev/null 2>&1 && pgy_warp_is_active; then
             warp_status="Active"; warp_color="$C_GREEN"
         fi
         if declare -F pgy_adblock_is_active >/dev/null 2>&1 && pgy_adblock_is_active; then
             adblock_status="Active"; adblock_color="$C_GREEN"
+        fi
+        if declare -F pgy_xray_is_active >/dev/null 2>&1 && pgy_xray_is_active; then
+            xray_status="Active"; xray_color="$C_GREEN"
         fi
 
         echo
@@ -55,6 +59,7 @@ protocol_menu() {
         fi
         pgy_menu_status "[11]" "Cloudflare WARP Suite" "$warp_status" "$warp_color"
         pgy_menu_status "[12]" "Server-Side Adblocker" "$adblock_status" "$adblock_color"
+        pgy_menu_status "[13]" "Xray Multi-Protocol Suite" "$xray_status" "$xray_color"
         pgy_box_divider
         pgy_menu1 "[ 0]" "Return to Main Menu"
         pgy_box_bot
@@ -72,6 +77,7 @@ protocol_menu() {
             10) if declare -F pgy_openvpn_menu >/dev/null 2>&1; then pgy_openvpn_menu; else invalid_option; fi ;;
             11) if declare -F warp_management_menu >/dev/null 2>&1; then warp_management_menu; else invalid_option; fi ;;
             12) if declare -F adblock_management_menu >/dev/null 2>&1; then adblock_management_menu; else invalid_option; fi ;;
+            13) if declare -F xray_management_menu >/dev/null 2>&1; then xray_management_menu; else invalid_option; fi ;;
             0) return ;;
             *) invalid_option ;;
         esac
