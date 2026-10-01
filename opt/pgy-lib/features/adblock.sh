@@ -100,16 +100,39 @@ pgy_adblock_get_status() {
     fi
 }
 
+pgy_adblock_apply_firewall() {
+    # Redirect DNS traffic (port 53) from SSH tunnel users to local Adblock resolver (port 5353)
+    for grp in pgyusers tdzusers; do
+        if getent group "$grp" >/dev/null 2>&1; then
+            iptables -t nat -C OUTPUT -p udp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
+                iptables -t nat -A OUTPUT -p udp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+            iptables -t nat -C OUTPUT -p tcp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
+                iptables -t nat -A OUTPUT -p tcp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+        fi
+    done
+}
+
+pgy_adblock_remove_firewall() {
+    for grp in pgyusers tdzusers; do
+        if getent group "$grp" >/dev/null 2>&1; then
+            iptables -t nat -D OUTPUT -p udp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+            iptables -t nat -D OUTPUT -p tcp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+        fi
+    done
+}
+
 pgy_adblock_toggle() {
     if pgy_adblock_is_active; then
+        pgy_adblock_remove_firewall
         rm -f "$ADBLOCK_CONF"
         systemctl restart dnsmasq >/dev/null 2>&1 || true
-        echo -e "${C_WARN}  DNS Adblocker telah Dinonaktifkan.${C_RESET}"
+        echo -e "${C_WARN}  DNS Adblocker telah Dinonaktifkan (XRay & SSH).${C_RESET}"
     else
         pgy_adblock_update_rules
         systemctl enable dnsmasq >/dev/null 2>&1 || true
         systemctl restart dnsmasq >/dev/null 2>&1 || true
-        echo -e "${C_GREEN}  DNS Adblocker telah Diaktifkan pada port ${ADBLOCK_PORT}.${C_RESET}"
+        pgy_adblock_apply_firewall
+        echo -e "${C_GREEN}  DNS Adblocker telah Diaktifkan untuk XRay & SSH pada port ${ADBLOCK_PORT}.${C_RESET}"
     fi
 }
 
