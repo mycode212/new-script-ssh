@@ -76,7 +76,7 @@ protocol_menu() {
             8) pgy_run_action install_zivpn ;; 9) pgy_run_action uninstall_zivpn ;;
             10) if declare -F pgy_openvpn_menu >/dev/null 2>&1; then pgy_openvpn_menu; else invalid_option; fi ;;
             11) if declare -F warp_management_menu >/dev/null 2>&1; then warp_management_menu; else invalid_option; fi ;;
-            12) if declare -F adblock_management_menu >/dev/null 2>&1; then adblock_management_menu; else invalid_option; fi ;;
+            12) if declare -F adblock_quick_protocol_menu >/dev/null 2>&1; then adblock_quick_protocol_menu; else invalid_option; fi ;;
             13) if declare -F xray_management_menu >/dev/null 2>&1; then xray_management_menu; else invalid_option; fi ;;
             0) return ;;
             *) invalid_option ;;
