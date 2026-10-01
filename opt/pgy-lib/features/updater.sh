@@ -33,48 +33,53 @@ update_script() {
     }
     trap cleanup_update RETURN
 
-    local current_dir
-    current_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || true)"
+    local repo_url="${PGY_UPDATE_DEFAULT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
+    local repo_branch="${PGY_UPDATE_BRANCH:-main}"
+    local src_dir="${work_dir}/repo"
+    mkdir -p "${src_dir}"
 
-    # If current directory is a git repo, attempt git pull
-    if [[ -d "${current_dir}/.git" ]]; then
-        echo -e "  Sinkronisasi git repository lokal..."
-        if git -C "${current_dir}" pull origin "${PGY_UPDATE_BRANCH}" 2>&1; then
-            pgy_message ok "Git repo berhasil diperbarui."
-        else
-            pgy_message warn "Git pull gagal, beralih ke sinkronisasi berkas modular..."
-        fi
+    if command -v git >/dev/null 2>&1 && git clone --depth=1 -b "${repo_branch}" "${repo_url}" "${src_dir}" >/dev/null 2>&1; then
+        echo -e "  Repository berhasil diunduh via Git."
+    else
+        echo -e "  Mengunduh arsip paket rilis..."
+        curl -Ls "https://github.com/mycode212/new-script-ssh/archive/refs/heads/${repo_branch}.tar.gz" | tar -xz -C "${src_dir}" --strip-components=1 2>/dev/null || {
+            pgy_message danger "Gagal mengunduh pembaruan dari repository: ${repo_url}"
+            return 1
+        }
     fi
+
+    if [[ ! -d "${src_dir}/opt/pgy-lib" && ! -f "${src_dir}/menu.sh" ]]; then
+        pgy_message danger "Struktur berkas pembaruan tidak lengkap."
+        return 1
+    fi
+
+    echo -e "  Sinkronisasi modul /pgy-lib/opt dan binary sistem..."
+    mkdir -p /pgy-lib/opt "${PGY_LIB_DIR}"
 
     # Perform atomic sync of modules to /pgy-lib/opt and /usr/local/lib/pgy-ssh-tunnel
-    if [[ -d "${current_dir}/opt/pgy-lib" ]]; then
-        echo -e "  Sinkronisasi modul /pgy-lib/opt ..."
-        mkdir -p /pgy-lib/opt
-        cp -a "${current_dir}/opt/pgy-lib/." /pgy-lib/opt/ 2>/dev/null || true
-        chmod -R 755 /pgy-lib/opt 2>/dev/null || true
-
-        mkdir -p "${PGY_LIB_DIR}"
-        cp -a "${current_dir}/opt/pgy-lib/." "${PGY_LIB_DIR}/" 2>/dev/null || true
-        chmod -R 755 "${PGY_LIB_DIR}" 2>/dev/null || true
+    if [[ -d "${src_dir}/opt/pgy-lib" ]]; then
+        cp -a "${src_dir}/opt/pgy-lib/." /pgy-lib/opt/ 2>/dev/null || true
+        cp -a "${src_dir}/opt/pgy-lib/." "${PGY_LIB_DIR}/" 2>/dev/null || true
+        chmod -R 755 /pgy-lib/opt "${PGY_LIB_DIR}" 2>/dev/null || true
     fi
 
-    # Copy Python helper scripts to PGY_LIB_DIR
+    # Copy Python helper scripts
     for py_script in pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_openvpn_runtime.py pgy_ssh_auth_session.py pgy_ws_ssh_bridge.py openvpn_module.sh; do
-        if [[ -f "${current_dir}/${py_script}" ]]; then
-            cp -a "${current_dir}/${py_script}" "${PGY_LIB_DIR}/${py_script}" 2>/dev/null || true
-            cp -a "${current_dir}/${py_script}" "/pgy-lib/opt/${py_script}" 2>/dev/null || true
+        if [[ -f "${src_dir}/${py_script}" ]]; then
+            cp -a "${src_dir}/${py_script}" "${PGY_LIB_DIR}/${py_script}" 2>/dev/null || true
+            cp -a "${src_dir}/${py_script}" "/pgy-lib/opt/${py_script}" 2>/dev/null || true
             chmod 755 "${PGY_LIB_DIR}/${py_script}" "/pgy-lib/opt/${py_script}" 2>/dev/null || true
         fi
     done
 
     # Update binaries
-    if [[ -f "${current_dir}/menu.sh" ]]; then
-        install -m 755 "${current_dir}/menu.sh" /usr/local/bin/menu
-        install -m 755 "${current_dir}/menu.sh" /usr/local/bin/pgy
+    if [[ -f "${src_dir}/menu.sh" ]]; then
+        install -m 755 "${src_dir}/menu.sh" /usr/local/bin/menu
+        install -m 755 "${src_dir}/menu.sh" /usr/local/bin/pgy
     fi
 
-    if [[ -f "${current_dir}/opt/pgy-lib/bin/pgy-license-check" ]]; then
-        install -m 755 "${current_dir}/opt/pgy-lib/bin/pgy-license-check" /usr/local/bin/pgy-license-check
+    if [[ -f "${src_dir}/opt/pgy-lib/bin/pgy-license-check" ]]; then
+        install -m 755 "${src_dir}/opt/pgy-lib/bin/pgy-license-check" /usr/local/bin/pgy-license-check
     fi
 
     # Create shortcut for update
@@ -85,9 +90,9 @@ EOF
     chmod 755 /usr/local/bin/pgy-update
 
     # Restart core tunnel services if running to apply changes
-    systemctl is-active --quiet pgy-ws-ssh-bridge && systemctl restart pgy-ws-ssh-bridge >/dev/null 2>&1 || true
-    systemctl is-active --quiet haproxy && systemctl restart haproxy >/dev/null 2>&1 || true
-    systemctl is-active --quiet nginx && systemctl restart nginx >/dev/null 2>&1 || true
+    systemctl is-active --quiet pgy-ws-ssh-bridge 2>/dev/null && systemctl restart pgy-ws-ssh-bridge >/dev/null 2>&1 || true
+    systemctl is-active --quiet haproxy 2>/dev/null && systemctl restart haproxy >/dev/null 2>&1 || true
+    systemctl is-active --quiet nginx 2>/dev/null && systemctl restart nginx >/dev/null 2>&1 || true
 
     echo
     pgy_message ok "Pembaruan script Auto Script SSH ProgoCloud berhasil diselesaikan!"
