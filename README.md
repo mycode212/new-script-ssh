@@ -84,40 +84,52 @@ Arsitektur sistem dibangun secara modular di bawah pustaka `/pgy-lib/opt/` untuk
 
 ---
 
-## Panduan Instalasi
+## Supported OS & Architectures
 
-### Persyaratan Sistem
-- VPS dengan sistem operasi **Ubuntu Server** (>= 20.04) atau **Debian** (>= 11).
-- Hak akses penuh sebagai **root**.
-- IP VPS telah terdaftar aktif pada sistem lisensi ProgoCloud.
+Auto Script SSH By : ProgoCloud dirancang dan dioptimalkan untuk VPS Linux keluarga Debian/Ubuntu berbasis **APT** dan **systemd**.
 
-### 1. Metode Cepat (One-Line Command):
+### 1. Sistem Operasi yang Didukung
 
-Jalankan perintah berikut pada terminal VPS Anda sebagai root:
+| Distribusi Linux | Versi yang Didukung | Status Rekomendasi |
+|---|---|---|
+| **Ubuntu Server** | 20.04 (Focal), 22.04 (Jammy), 24.04 (Noble) & versi lebih baru | **Sangat Direkomendasikan (LTS)** |
+| **Debian** | Debian 11 (Bullseye), Debian 12 (Bookworm) & versi lebih baru | **Sangat Direkomendasikan (Stable)** |
+| **Kali Linux** | Rolling Releases (berbasis systemd) | Kompatibel |
+| **Armbian / DietPi** | Versi berbasis Debian / Ubuntu | Kompatibel |
+
+### 2. Arsitektur CPU
+
+| Arsitektur | Alias | Status Dukungan |
+|---|---|---|
+| **x86_64 / 64-bit Intel/AMD** | `amd64`, `x86_64` | **Dukungan Penuh (Semua Protokol)** |
+| **ARM 64-bit** | `arm64`, `aarch64` | **Dukungan Penuh** |
+| **ARM 32-bit** | `armv7l`, `armhf` | Kompatibel untuk modul inti SSH |
+
+### 3. Persyaratan Minimum VPS
+- **Akses:** Wajib hak akses penuh sebagai **root** (`sudo -i`).
+- **RAM:** Minimum 512 MB (Disarankan 1 GB atau lebih).
+- **Penyimpanan:** Minimum 2 GB ruang kosong.
+- **Jaringan:** IP VPS publik statis dengan koneksi internet aktif.
+
+---
+
+## Installation
+
+**One-line install (as root):**
 
 ```bash
-apt update -y && apt install -y curl && bash <(curl -fsSL https://raw.githubusercontent.com/mycode212/new-script-ssh/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/mycode212/new-script-ssh/main/install.sh)
 ```
 
-### 2. Metode Git Clone:
+**Manual install:**
 
 ```bash
-apt update -y && apt install -y git
-git clone https://github.com/mycode212/new-script-ssh.git
-cd new-script-ssh
+curl -LO https://raw.githubusercontent.com/mycode212/new-script-ssh/main/install.sh
 chmod +x install.sh
 ./install.sh
 ```
 
-Setelah instalasi selesai, buka panel manajemen dengan mengetikkan:
-
-```bash
-menu
-```
-atau
-```bash
-pgy
-```
+After installation, type **`menu`** or **`pgy`** to launch the management interface.
 
 ---
 
