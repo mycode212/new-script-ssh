@@ -82,9 +82,10 @@ tdz_row2() { pgy_row2 "$@"; }
 
 pgy_kv2() {
     local k1="$1" v1="$2" k2="$3" v2="$4" color="${5:-$C_CYAN}"
-    local half=$(( (PGY_BOX_WIDTH - 5) / 2 ))
-    local v1_max=$(( half - ${#k1} - 3 ))
-    local v2_max=$(( half - ${#k2} - 3 ))
+    local w1=$(( (PGY_BOX_WIDTH - 5) / 2 ))
+    local w2=$(( (PGY_BOX_WIDTH - 5) - w1 ))
+    local v1_max=$(( w1 - ${#k1} - 3 ))
+    local v2_max=$(( w2 - ${#k2} - 3 ))
     (( v1_max < 0 )) && v1_max=0
     (( v2_max < 0 )) && v2_max=0
     local v1_fit v2_fit
@@ -96,8 +97,8 @@ pgy_kv2() {
     local c1w c2w
     c1w=$(_pgy_w "$col1")
     c2w=$(_pgy_w "$col2")
-    local pad1=$(( half - c1w ))
-    local pad2=$(( half - c2w ))
+    local pad1=$(( w1 - c1w ))
+    local pad2=$(( w2 - c2w ))
     local sp1="" sp2=""
     (( pad1 > 0 )) && printf -v sp1 "%${pad1}s" ""
     (( pad2 > 0 )) && printf -v sp2 "%${pad2}s" ""
@@ -107,15 +108,16 @@ tdz_kv2() { pgy_kv2 "$@"; }
 
 pgy_menu2() {
     local key1="$1" label1="$2" key2="$3" label2="$4" color="${5:-$C_CYAN}"
-    local half=$(( (PGY_BOX_WIDTH - 5) / 2 ))
+    local w1=$(( (PGY_BOX_WIDTH - 5) / 2 ))
+    local w2=$(( (PGY_BOX_WIDTH - 5) - w1 ))
     local item1 item2
     item1=$(printf "${C_CHOICE}%s${C_RESET} %s" "$key1" "$label1")
     item2=$(printf "${C_CHOICE}%s${C_RESET} %s" "$key2" "$label2")
     local i1w i2w
     i1w=$(_pgy_w "$item1")
     i2w=$(_pgy_w "$item2")
-    local pad1=$(( half - i1w ))
-    local pad2=$(( half - i2w ))
+    local pad1=$(( w1 - i1w ))
+    local pad2=$(( w2 - i2w ))
     local sp1="" sp2=""
     (( pad1 > 0 )) && printf -v sp1 "%${pad1}s" ""
     (( pad2 > 0 )) && printf -v sp2 "%${pad2}s" ""
