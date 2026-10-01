@@ -218,45 +218,89 @@ pgy_message() {
 }
 tdz_message() { pgy_message "$@"; }
 
+PGY_PROGRESS_PID=""
+PGY_PROGRESS_LABEL=""
+
 pgy_progress_begin() {
-    local title="$1" subtitle="${2:-}"
-    pgy_refresh_box_width
-    [[ -t 1 ]] && clear
-    echo
-    pgy_box_top
-    pgy_box_header "$title"
-    pgy_box_divider
-    if [[ -n "$subtitle" ]]; then
-        pgy_row "$(printf "${C_GRAY}%s${C_RESET}" "$subtitle")"
-        pgy_box_divider
+    local step_num="" total_steps="" label=""
+    if [[ "$1" =~ ^[0-9]+$ && "$2" =~ ^[0-9]+$ ]]; then
+        step_num="$1"
+        total_steps="$2"
+        label="$3"
+    else
+        label="$1"
+    fi
+
+    # Terminate any previous spinner
+    if [[ -n "${PGY_PROGRESS_PID:-}" ]] && kill -0 "${PGY_PROGRESS_PID}" 2>/dev/null; then
+        kill "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        wait "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        PGY_PROGRESS_PID=""
+    fi
+
+    local display_text="$label"
+    if [[ -n "$step_num" && -n "$total_steps" ]]; then
+        display_text="[${step_num}/${total_steps}] ${label}"
+    fi
+    PGY_PROGRESS_LABEL="$display_text"
+
+    if [[ -t 1 ]]; then
+        printf '\033[?25l' 2>/dev/null || true
+        (
+            local index=0
+            local -a spinners=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+            while true; do
+                printf '\r\033[2K  \033[38;2;0;212;255m%s\033[0m  %s...' "${spinners[$index]}" "${display_text}"
+                index=$(((index + 1) % ${#spinners[@]}))
+                sleep 0.08
+            done
+        ) >&2 &
+        PGY_PROGRESS_PID=$!
+    else
+        echo -e "  [..] ${display_text}..."
     fi
 }
 tdz_progress_begin() { pgy_progress_begin "$@"; }
 
-pgy_progress_finish() {
-    local success="${1:-true}" message="${2:-Proses selesai.}"
-    pgy_box_divider
-    if [[ "$success" == "true" ]]; then
-        pgy_row "$(printf "${C_GREEN}[OK]${C_RESET} %s" "$message")"
-    else
-        pgy_row "$(printf "${C_RED}[FAIL]${C_RESET} %s" "$message")"
-    fi
-    pgy_box_bot
-    echo
-}
-tdz_progress_finish() { pgy_progress_finish "$@"; }
-
 pgy_progress_done() {
-    local text="$1"
-    pgy_row "$(printf "${C_GREEN}[✓]${C_RESET} %s" "$text")"
+    local text="${1:-${PGY_PROGRESS_LABEL:-Selesai}}"
+    if [[ -n "${PGY_PROGRESS_PID:-}" ]] && kill -0 "${PGY_PROGRESS_PID}" 2>/dev/null; then
+        kill "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        wait "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        PGY_PROGRESS_PID=""
+    fi
+    printf '\r\033[2K\033[?25h' 2>/dev/null || true
+    echo -e "  ${C_GREEN}[✓]${C_RESET} ${text}"
 }
 tdz_progress_done() { pgy_progress_done "$@"; }
 
 pgy_progress_failed() {
-    local text="$1"
-    pgy_row "$(printf "${C_RED}[✗]${C_RESET} %s" "$text")"
+    local text="${1:-${PGY_PROGRESS_LABEL:-Gagal}}"
+    if [[ -n "${PGY_PROGRESS_PID:-}" ]] && kill -0 "${PGY_PROGRESS_PID}" 2>/dev/null; then
+        kill "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        wait "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        PGY_PROGRESS_PID=""
+    fi
+    printf '\r\033[2K\033[?25h' 2>/dev/null || true
+    echo -e "  ${C_RED}[✗]${C_RESET} ${text}"
 }
 tdz_progress_failed() { pgy_progress_failed "$@"; }
+
+pgy_progress_finish() {
+    local success="${1:-true}" message="${2:-Proses selesai.}"
+    if [[ -n "${PGY_PROGRESS_PID:-}" ]] && kill -0 "${PGY_PROGRESS_PID}" 2>/dev/null; then
+        kill "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        wait "${PGY_PROGRESS_PID}" 2>/dev/null || true
+        PGY_PROGRESS_PID=""
+    fi
+    printf '\r\033[2K\033[?25h' 2>/dev/null || true
+    if [[ "$success" == "true" ]]; then
+        echo -e "  ${C_GREEN}[OK]${C_RESET} ${message}"
+    else
+        echo -e "  ${C_RED}[FAIL]${C_RESET} ${message}"
+    fi
+}
+tdz_progress_finish() { pgy_progress_finish "$@"; }
 
 pgy_progress_run() {
     local step_num="" total_steps="" label=""
@@ -275,6 +319,7 @@ pgy_progress_run() {
         display_text="[${step_num}/${total_steps}] ${label}"
     fi
 
+    pgy_progress_begin "${step_num}" "${total_steps}" "${label}"
     local pgy_log="${PGY_ACTION_LOG:-${TDZ_ACTION_LOG:-/dev/null}}"
     if "$@" >> "$pgy_log" 2>&1; then
         pgy_progress_done "$display_text"
