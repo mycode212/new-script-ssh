@@ -22,7 +22,7 @@ preload_dashboard_data() {
     local local_ver
     local_ver="$(get_pgy_installed_version 2>/dev/null || echo "${PGY_SCRIPT_VERSION:-0.0.1}")"
     local remote_ver=""
-    remote_ver=$(curl -s --max-time 4 "https://raw.githubusercontent.com/mycode212/new-script-ssh/main/version.txt" 2>/dev/null | tr -d ' \r\n\t')
+    remote_ver=$(curl -s --max-time 4 "${REPO_URL}/version.txt" 2>/dev/null | tr -d ' \r\n\t')
     if [[ -n "$remote_ver" && "$remote_ver" != "$local_ver" ]]; then
         update_avail=true
         latest_ver="$remote_ver"
@@ -61,9 +61,11 @@ EOF
 main_menu() {
     local cache_file="/tmp/pgy_menu_cache_${UID}_$$.env"
 
-    # Show animated loading spinner on initial launch
+    # Show Header Banner FIRST, then display the spinner below it
     if [[ -t 1 && "${PGY_MENU_LOADED:-false}" != "true" ]]; then
         PGY_MENU_LOADED=true
+        show_banner
+        echo
         printf '\033[?25l' 2>/dev/null || true
         (
             preload_dashboard_data "$cache_file"
@@ -72,7 +74,7 @@ main_menu() {
         local -a frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local f_idx=0
         while kill -0 "$load_pid" 2>/dev/null; do
-            printf '\r\033[2K  \033[38;2;0;212;255m%s\033[0m \033[1;37mMemuat Konten & Memeriksa Pembaruan...\033[0m' "${frames[$f_idx]}"
+            printf '\r\033[2K  \033[38;2;0;212;255m%s\033[0m \033[1;37mSedang Memuat Konten...\033[0m' "${frames[$f_idx]}"
             f_idx=$(( (f_idx + 1) % ${#frames[@]} ))
             sleep 0.08
         done

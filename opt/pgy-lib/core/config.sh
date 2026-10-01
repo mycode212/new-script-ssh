@@ -27,6 +27,12 @@ PGY_SCRIPT_VERSION="$(get_pgy_installed_version)"
 PGY_HEADER_BRAND="ProgoCloud Script SSH Premium"
 PGY_VERSION_TAG="Copyright 2026 By MKDev"
 
+# Repository Base URL & License API
+REPO_URL="${REPO_URL:-https://raw.githubusercontent.com/mycode212/new-script-ssh/main}"
+GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
+PGY_LICENSE_API_DEFAULT_URL="${PGY_LICENSE_API_DEFAULT_URL:-https://autoscript-license.worker-balancer-mang.workers.dev/api/v1/license/check}"
+PGY_LICENSE_PORTAL_URL="${PGY_LICENSE_PORTAL_URL:-https://autoscript-license-3xj.pages.dev}"
+
 DB_DIR="/etc/pgytunnel"
 DB_FILE="$DB_DIR/users.db"
 PGY_MENU_BINARY="${PGY_MENU_BINARY:-/usr/local/bin/menu}"

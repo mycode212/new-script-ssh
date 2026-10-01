@@ -4,8 +4,8 @@
 # Module: features/updater.sh - Script Updater & Module Sync
 # ============================================================
 
-PGY_UPDATE_DEFAULT_REPO_URL="${PGY_UPDATE_DEFAULT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
-PGY_UPDATE_BRANCH="${PGY_UPDATE_BRANCH:-main}"
+PGY_UPDATE_DEFAULT_REPO_URL="${PGY_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
+PGY_UPDATE_BRANCH="${PGY_REPO_BRANCH:-main}"
 PGY_UPDATE_CHECK_TS=0
 PGY_UPDATE_AVAILABLE=false
 PGY_LATEST_VERSION="${PGY_SCRIPT_VERSION:-0.0.1}"
@@ -22,7 +22,7 @@ check_script_update_available() {
     local_ver="$(get_pgy_installed_version 2>/dev/null || echo "${PGY_SCRIPT_VERSION:-0.0.1}")"
 
     local remote_ver=""
-    remote_ver=$(curl -s --max-time 3 "https://raw.githubusercontent.com/mycode212/new-script-ssh/main/version.txt" 2>/dev/null | tr -d ' \r\n\t')
+    remote_ver=$(curl -s --max-time 4 "${REPO_URL}/version.txt" 2>/dev/null | tr -d ' \r\n\t')
     if [[ -n "$remote_ver" && "$remote_ver" != "$local_ver" ]]; then
         PGY_UPDATE_AVAILABLE=true
         PGY_LATEST_VERSION="$remote_ver"
@@ -74,16 +74,15 @@ update_script() {
     }
     trap cleanup_update RETURN
 
-    local repo_url="${PGY_UPDATE_DEFAULT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
-    local repo_branch="${PGY_UPDATE_BRANCH:-main}"
+    local repo_url="${GIT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
     local src_dir="${work_dir}/repo"
     mkdir -p "${src_dir}"
 
-    if command -v git >/dev/null 2>&1 && git clone --depth=1 -b "${repo_branch}" "${repo_url}" "${src_dir}" >/dev/null 2>&1; then
+    if command -v git >/dev/null 2>&1 && git clone --depth=1 -b main "${repo_url}" "${src_dir}" >/dev/null 2>&1; then
         echo -e "  Repository berhasil diunduh via Git."
     else
         echo -e "  Mengunduh arsip paket rilis..."
-        curl -Ls "https://github.com/mycode212/new-script-ssh/archive/refs/heads/${repo_branch}.tar.gz" | tar -xz -C "${src_dir}" --strip-components=1 2>/dev/null || {
+        curl -Ls "https://github.com/mycode212/new-script-ssh/archive/refs/heads/main.tar.gz" | tar -xz -C "${src_dir}" --strip-components=1 2>/dev/null || {
             pgy_message danger "Gagal mengunduh pembaruan dari repository: ${repo_url}"
             return 1
         }

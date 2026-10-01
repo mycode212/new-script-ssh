@@ -8,7 +8,7 @@ PGY_LICENSE_BLOCKED=0
 PGY_LICENSE_BLOCK_REASON=""
 
 pgy_license_trusted_default_api_url() {
-    printf '%s\n' "https://autoscript-license.worker-balancer-mang.workers.dev/api/v1/license/check"
+    printf '%s\n' "${PGY_LICENSE_API_DEFAULT_URL:-https://autoscript-license.worker-balancer-mang.workers.dev/api/v1/license/check}"
 }
 
 pgy_license_guard_config_file() {
