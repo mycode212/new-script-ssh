@@ -388,6 +388,29 @@ def load_valid_cache_for_candidates(cfg, public_ips):
     return None, ""
 
 
+def is_response_allowed(response):
+    if not isinstance(response, dict):
+        return False
+    for key in ("allowed", "active", "is_active", "valid", "success"):
+        val = response.get(key)
+        if val is True or str(val).lower() in ("true", "1", "yes"):
+            return True
+
+    status = str(response.get("status") or "").strip().lower()
+    if status in ("active", "allowed", "valid", "ok", "success", "allow", "cache-allow"):
+        return True
+    if status in ("denied", "revoked", "expired", "blocked", "not_registered", "error", "inactive"):
+        return False
+
+    reason = str(response.get("reason") or response.get("revoke_reason") or "").strip().lower()
+    if ("ip aktif" in reason or "aktif" in reason or "active" in reason) and not any(
+        neg in reason for neg in ("tidak", "belum", "not", "expired", "revoked", "blocked", "gagal")
+    ):
+        return True
+
+    return False
+
+
 def evaluate_license(cfg, *, stage, allow_disabled):
     now = isoformat_z(utcnow())
     api_url = (cfg.get("PGY_LICENSE_API_URL") or "").strip()
@@ -419,15 +442,17 @@ def evaluate_license(cfg, *, stage, allow_disabled):
         )
         if status_code != 200 or not isinstance(response, dict):
             raise RuntimeError(f"Respons API tidak valid (HTTP {status_code})")
-        if "allowed" not in response:
-            raise RuntimeError("Respons API tidak memiliki field 'allowed'")
-        allowed = bool(response.get("allowed"))
-        reason = str(response.get("reason") or "")
+        
+        allowed = is_response_allowed(response)
+        reason = str(response.get("reason") or response.get("message") or "")
         revoke_reason = str(response.get("revoke_reason") or "")
         label = str(response.get("label") or "")
         ttl_sec = parse_int(response.get("cache_ttl_sec"), cfg["cache_ttl_sec"])
         public_ip = normalize_ipv4(response.get("public_ip")) or claimed_public_ip
         cache_expires_at = ""
+        raw_status = str(response.get("status") or "").strip().lower()
+        status = raw_status if raw_status in ("active", "allowed", "valid", "ok") else ("allowed" if allowed else "denied")
+
         if allowed:
             cache = save_cache(cfg, public_ip=public_ip, reason=reason, checked_at=now, ttl_sec=ttl_sec)
             cache_expires_at = cache["cache_expires_at"]
@@ -435,7 +460,7 @@ def evaluate_license(cfg, *, stage, allow_disabled):
             cfg,
             stage=stage,
             allowed=allowed,
-            status="allowed" if allowed else "denied",
+            status=status,
             source="api",
             reason=reason or ("allowed" if allowed else "denied by API"),
             public_ip=public_ip,

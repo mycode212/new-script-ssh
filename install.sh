@@ -176,11 +176,30 @@ check_license_before_all() {
 import json, sys
 try:
     d = json.loads(sys.argv[1])
-    allowed = 'true' if d.get('allowed', False) else 'false'
-    status = d.get('status', 'allowed' if allowed == 'true' else 'denied')
-    reason = str(d.get('reason', '') or d.get('revoke_reason', ''))
+    raw_status = str(d.get('status', '')).strip().lower()
+    reason = str(d.get('reason', '') or d.get('revoke_reason', '') or d.get('message', ''))
+    
+    # Determine allowed status
+    allowed = False
+    for k in ('allowed', 'active', 'is_active', 'valid', 'success'):
+        v = d.get(k)
+        if v is True or str(v).lower() in ('true', '1', 'yes'):
+            allowed = True
+            break
+            
+    if not allowed and raw_status in ('active', 'allowed', 'valid', 'ok', 'success', 'allow', 'cache-allow'):
+        allowed = True
+    elif not allowed:
+        r_low = reason.lower()
+        if ('ip aktif' in r_low or 'aktif' in r_low or 'active' in r_low) and not any(
+            neg in r_low for neg in ('tidak', 'belum', 'not', 'expired', 'revoked', 'blocked', 'gagal')
+        ):
+            allowed = True
+
+    status = raw_status if raw_status in ('active', 'allowed', 'valid', 'ok') else ('allowed' if allowed else 'denied')
+    allowed_str = 'true' if allowed else 'false'
     ret_ip = str(d.get('public_ip', '') or sys.argv[2])
-    print(f'{status}|{allowed}|{reason}|{ret_ip}')
+    print(f'{status}|{allowed_str}|{reason}|{ret_ip}')
 except Exception as e:
     print(f'error|false|{e}|{sys.argv[2]}')
 " "$json_body" "$pub_ip" 2>/dev/null || echo "denied|false|Respons API tidak valid|$pub_ip")
