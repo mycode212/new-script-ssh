@@ -51,17 +51,43 @@ pgy_row() {
     local clean cw
     clean=$(_pgy_strip_ansi "$content")
     cw=${#clean}
-    if (( cw > max_inner )); then
-        clean="${clean:0:$max_inner}"
-        content="${clean}"
-        cw=${#clean}
+
+    if (( cw <= max_inner )); then
+        local pad=$(( max_inner - cw ))
+        local spaces=""
+        (( pad > 0 )) && printf -v spaces "%${pad}s" ""
+        printf "  ${color}║${C_RESET} %s%s ${color}║${C_RESET}\n" "$content" "$spaces"
+        return
     fi
-    local pad=$(( max_inner - cw ))
-    local spaces=""
-    if (( pad > 0 )); then
-        printf -v spaces "%${pad}s" ""
+
+    local cur_line="" cur_clean="" word
+    for word in $content; do
+        local w_clean
+        w_clean=$(_pgy_strip_ansi "$word")
+        local new_clean_len=$(( ${#cur_clean} + ${#w_clean} + ( ${#cur_clean} > 0 ? 1 : 0 ) ))
+        if (( new_clean_len <= max_inner )); then
+            if [[ -z "$cur_line" ]]; then
+                cur_line="$word"
+                cur_clean="$w_clean"
+            else
+                cur_line="${cur_line} ${word}"
+                cur_clean="${cur_clean} ${w_clean}"
+            fi
+        else
+            local pad=$(( max_inner - ${#cur_clean} ))
+            local spaces=""
+            (( pad > 0 )) && printf -v spaces "%${pad}s" ""
+            printf "  ${color}║${C_RESET} %s%s ${color}║${C_RESET}\n" "$cur_line" "$spaces"
+            cur_line="$word"
+            cur_clean="$w_clean"
+        fi
+    done
+    if [[ -n "$cur_line" ]]; then
+        local pad=$(( max_inner - ${#cur_clean} ))
+        local spaces=""
+        (( pad > 0 )) && printf -v spaces "%${pad}s" ""
+        printf "  ${color}║${C_RESET} %s%s ${color}║${C_RESET}\n" "$cur_line" "$spaces"
     fi
-    printf "  ${color}║${C_RESET} %s%s ${color}║${C_RESET}\n" "$content" "$spaces"
 }
 tdz_row() { pgy_row "$@"; }
 

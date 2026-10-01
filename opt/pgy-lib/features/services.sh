@@ -495,12 +495,20 @@ install_ssl_tunnel() {
     pgy_detail "Public Ports" "${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT}"
     pgy_detail "Internal Ports" "${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}"
     pgy_detail "Secure Backend" "$HAPROXY_INTERNAL_DECRYPT_PORT"
+    pgy_box_close_if_open
 
     if [ -f "$HAPROXY_CONFIG" ] || [ -f "$NGINX_CONFIG_FILE" ]; then
-        pgy_message WARNING "Existing proxy configuration will be replaced by the managed edge layout."
-        read -p "  Continue with the replacement? (y/n): " confirm_replace
+        echo
+        pgy_box_top "$C_YELLOW"
+        pgy_box_header "KONFIRMASI PENGGANTIAN" "$C_YELLOW" "$C_YELLOW"
+        pgy_box_divider "$C_YELLOW"
+        pgy_row "Konfigurasi proxy lama yang terdeteksi akan diganti dengan susunan managed edge stack ProgoCloud." "$C_YELLOW"
+        pgy_box_bot "$C_YELLOW"
+        echo
+        read -r -p "$(echo -e "  ${C_PROMPT}Lanjutkan proses penggantian? [y/n]: ${C_RESET}")" confirm_replace
         if [[ "$confirm_replace" != "y" && "$confirm_replace" != "Y" ]]; then
-            pgy_message CANCELLED "Installation cancelled."
+            echo
+            pgy_message note "Instalasi dibatalkan oleh pengguna."
             return
         fi
     fi
