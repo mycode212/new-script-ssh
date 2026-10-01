@@ -478,6 +478,12 @@ install_core() {
         cp -a "${SOURCE_REPO_DIR}/opt/pgy-lib/." "${TARGET_LIB_DIR}/"
     fi
 
+    if [[ -f "${SOURCE_REPO_DIR}/version.txt" ]]; then
+        install -m 644 "${SOURCE_REPO_DIR}/version.txt" "${TARGET_OPT_LIB_DIR}/version.txt"
+        install -m 644 "${SOURCE_REPO_DIR}/version.txt" "${TARGET_LIB_DIR}/version.txt"
+        install -m 644 "${SOURCE_REPO_DIR}/version.txt" "${DATA_DIR}/version.txt"
+    fi
+
     install -m 755 "${SOURCE_REPO_DIR}/menu.sh" "$TARGET_MENU"
     install -m 755 "${SOURCE_REPO_DIR}/menu.sh" "$TARGET_PGY"
 

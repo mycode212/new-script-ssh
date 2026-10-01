@@ -4,9 +4,28 @@
 # Module: core/config.sh - Global configuration paths and ports
 # ============================================================
 
-PGY_SCRIPT_VERSION="0.0.1"
-PGY_HEADER_BRAND="Auto Script SSH By : ProgoCloud"
-PGY_VERSION_TAG="v0.0.1 ProgoCloud Edition"
+# Read installed version dynamically from version.txt
+get_pgy_installed_version() {
+    local v_file
+    for v_file in "/pgy-lib/opt/version.txt" \
+                  "/usr/local/lib/pgy-ssh-tunnel/version.txt" \
+                  "${PGY_SOURCE_DIR:-}/version.txt" \
+                  "/etc/pgytunnel/version.txt"; do
+        if [[ -f "$v_file" ]]; then
+            local ver
+            ver=$(tr -d ' \r\n\t' < "$v_file" 2>/dev/null)
+            if [[ -n "$ver" ]]; then
+                printf '%s\n' "$ver"
+                return 0
+            fi
+        fi
+    done
+    printf '%s\n' "0.0.1"
+}
+
+PGY_SCRIPT_VERSION="$(get_pgy_installed_version)"
+PGY_HEADER_BRAND="ProgoCloud Script SSH Premium"
+PGY_VERSION_TAG="Copyright 2026 By MKDev"
 
 DB_DIR="/etc/pgytunnel"
 DB_FILE="$DB_DIR/users.db"

@@ -308,8 +308,9 @@ show_banner() {
     printf "╗%s\n" "$C_RESET"
 
     # Title: Auto Script SSH By : ProgoCloud
+    local title_text="${PGY_HEADER_BRAND:-Auto Script SSH By : ProgoCloud}"
     local title_clean title_content
-    title_clean=$(_pgy_fit "Auto Script SSH By : ProgoCloud" "$PGY_BOX_WIDTH")
+    title_clean=$(_pgy_fit "$title_text" "$PGY_BOX_WIDTH")
     title_content="${C_CYAN}${C_BOLD}${title_clean}${C_RESET}"
     local title_pad=$(( (PGY_BOX_WIDTH - ${#title_clean}) / 2 ))
     [[ $title_pad -lt 0 ]] && title_pad=0
@@ -320,9 +321,12 @@ show_banner() {
     [[ $title_rpad_len -gt 0 ]] && printf -v title_rpad "%${title_rpad_len}s" ""
     printf "  ${C_CYAN}║${C_RESET}%s%s%s${C_CYAN}║${C_RESET}\n" "$title_lpad" "$title_content" "$title_rpad"
 
-    # Subtitle line: Versi Script : 0.0.1
+    # Subtitle line: Versi Script : 0.0.1 • Copyright 2026 & Team ProgoCloud
+    local cur_ver
+    cur_ver="$(get_pgy_installed_version 2>/dev/null || echo "${PGY_SCRIPT_VERSION:-0.0.1}")"
+    local sub_text="Versi Script : ${cur_ver} • ${PGY_VERSION_TAG:-Copyright 2026 & Team ProgoCloud}"
     local sub_clean sub_content
-    sub_clean=$(_pgy_fit "Versi Script : ${PGY_SCRIPT_VERSION:-0.0.1}" "$PGY_BOX_WIDTH")
+    sub_clean=$(_pgy_fit "$sub_text" "$PGY_BOX_WIDTH")
     sub_content="${C_GRAY}${sub_clean}${C_RESET}"
     local sub_pad=$(( (PGY_BOX_WIDTH - ${#sub_clean}) / 2 ))
     [[ $sub_pad -lt 0 ]] && sub_pad=0

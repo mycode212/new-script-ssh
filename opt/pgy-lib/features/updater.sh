@@ -100,6 +100,13 @@ update_script() {
         chmod -R 755 /pgy-lib/opt "${PGY_LIB_DIR}" 2>/dev/null || true
     fi
 
+    # Sync version.txt
+    if [[ -f "${src_dir}/version.txt" ]]; then
+        install -m 644 "${src_dir}/version.txt" /pgy-lib/opt/version.txt
+        install -m 644 "${src_dir}/version.txt" "${PGY_LIB_DIR}/version.txt"
+        install -m 644 "${src_dir}/version.txt" "${DB_DIR}/version.txt"
+    fi
+
     # Copy Python helper scripts
     for py_script in pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_openvpn_runtime.py pgy_ssh_auth_session.py pgy_ws_ssh_bridge.py openvpn_module.sh; do
         if [[ -f "${src_dir}/${py_script}" ]]; then
