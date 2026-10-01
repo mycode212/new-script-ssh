@@ -259,10 +259,8 @@ run_step_with_spinner() {
     ) >"${log_file}" 2>&1 &
     pid=$!
 
-    set +e
     ui_spinner_wait "${pid}" "${label}"
     rc=$?
-    set -e
 
     if (( rc == 0 )); then
         rm -f "${log_file}" >/dev/null 2>&1 || true

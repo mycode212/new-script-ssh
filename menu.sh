@@ -5,8 +5,6 @@
 # Repo: https://github.com/mycode212/new-script-ssh
 # ============================================================
 
-set -Eeuo pipefail 2>/dev/null || true
-
 # Determine script & module roots
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P || true)"
 export PGY_SOURCE_DIR="${SCRIPT_DIR}"
@@ -93,8 +91,7 @@ if [[ "${1:-}" == "--source-only" ]]; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Interactive runtime execution
-require_interactive_terminal 2>/dev/null || true
+# Sync runtime state
 sync_runtime_components_if_needed 2>/dev/null || true
 
 # Launch ProgoCloud Main Menu

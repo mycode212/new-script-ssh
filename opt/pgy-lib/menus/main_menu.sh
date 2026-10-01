@@ -25,19 +25,21 @@ main_menu() {
         local pill_haprx="${C_STATUS_I}○${C_RESET}"  pill_nginx="${C_STATUS_I}○${C_RESET}"
         local pill_ws="${C_STATUS_I}○${C_RESET}"     pill_badvpn="${C_STATUS_I}○${C_RESET}"
         local pill_dnstt="${C_STATUS_I}○${C_RESET}"
-        systemctl is-active --quiet haproxy            && pill_haprx="${C_STATUS_A}●${C_RESET}"
-        systemctl is-active --quiet nginx              && pill_nginx="${C_STATUS_A}●${C_RESET}"
-        systemctl is-active --quiet pgy-ws-ssh-bridge  && pill_ws="${C_STATUS_A}●${C_RESET}"
-        systemctl is-active --quiet badvpn              && pill_badvpn="${C_STATUS_A}●${C_RESET}"
-        systemctl is-active --quiet dnstt               && pill_dnstt="${C_STATUS_A}●${C_RESET}"
+        if systemctl is-active --quiet haproxy 2>/dev/null; then pill_haprx="${C_STATUS_A}●${C_RESET}"; fi
+        if systemctl is-active --quiet nginx 2>/dev/null; then pill_nginx="${C_STATUS_A}●${C_RESET}"; fi
+        if systemctl is-active --quiet pgy-ws-ssh-bridge 2>/dev/null; then pill_ws="${C_STATUS_A}●${C_RESET}"; fi
+        if systemctl is-active --quiet badvpn 2>/dev/null; then pill_badvpn="${C_STATUS_A}●${C_RESET}"; fi
+        if systemctl is-active --quiet dnstt 2>/dev/null; then pill_dnstt="${C_STATUS_A}●${C_RESET}"; fi
 
         # ── SECTION 1: SERVER PROFILE ──
         local _cpu_core_word="CORE"
-        (( DASH_CACHE_CPU_CORES > 1 )) && _cpu_core_word="CORES"
+        if [[ "${DASH_CACHE_CPU_CORES:-1}" -gt 1 ]]; then
+            _cpu_core_word="CORES"
+        fi
         local _cpu_pct
-        _cpu_pct=$(compute_cpu_pct)
-        local _cpu_val="${_cpu_pct}% (${DASH_CACHE_CPU_CORES} ${_cpu_core_word})"
-        local _ram_val="${DASH_CACHE_RAM_PCT}% (${DASH_CACHE_RAM_USED})"
+        _cpu_pct=$(compute_cpu_pct 2>/dev/null || echo 0)
+        local _cpu_val="${_cpu_pct}% (${DASH_CACHE_CPU_CORES:-1} ${_cpu_core_word})"
+        local _ram_val="${DASH_CACHE_RAM_PCT:-0}% (${DASH_CACHE_RAM_USED:-0 / 0})"
         echo
         pgy_box_top
         pgy_box_header "SERVER PROFILE"
