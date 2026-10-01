@@ -91,8 +91,5 @@ if [[ "${1:-}" == "--source-only" ]]; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Sync runtime state
-sync_runtime_components_if_needed 2>/dev/null || true
-
 # Launch ProgoCloud Main Menu
 main_menu

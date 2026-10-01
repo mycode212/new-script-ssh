@@ -4,15 +4,96 @@
 # Module: menus/main_menu.sh - Interactive Main Dashboard
 # ============================================================
 
+preload_dashboard_data() {
+    local cache_file="${1:-/tmp/pgy_menu_cache_${UID}_$$.env}"
+
+    # 1. Sync runtime state silently in background
+    sync_runtime_components_if_needed >/dev/null 2>&1 || true
+
+    # 2. Live license check
+    local lic_blocked=0 lic_reason=""
+    if ! pgy_license_guard_preflight "menu" >/dev/null 2>&1; then
+        lic_blocked=1
+        lic_reason="${PGY_LICENSE_BLOCK_REASON:-}"
+    fi
+
+    # 3. Live version & update check against GitHub repo
+    local update_avail=false latest_ver=""
+    local local_ver
+    local_ver="$(get_pgy_installed_version 2>/dev/null || echo "${PGY_SCRIPT_VERSION:-0.0.1}")"
+    local remote_ver=""
+    remote_ver=$(curl -s --max-time 4 "https://raw.githubusercontent.com/mycode212/new-script-ssh/main/version.txt" 2>/dev/null | tr -d ' \r\n\t')
+    if [[ -n "$remote_ver" && "$remote_ver" != "$local_ver" ]]; then
+        update_avail=true
+        latest_ver="$remote_ver"
+    else
+        update_avail=false
+        latest_ver="$local_ver"
+    fi
+
+    # 4. Refresh Dashboard System & Network Cache
+    refresh_dashboard_cache >/dev/null 2>&1 || true
+
+    # 5. Write runtime state to cache file
+    cat <<EOF > "$cache_file"
+PGY_LICENSE_BLOCKED=${lic_blocked}
+PGY_LICENSE_BLOCK_REASON=$(printf '%q' "${lic_reason}")
+PGY_UPDATE_AVAILABLE=${update_avail}
+PGY_LATEST_VERSION=$(printf '%q' "${latest_ver}")
+PGY_UPDATE_CHECK_TS=$(date +%s)
+DASH_CACHE_TS=${DASH_CACHE_TS:-0}
+DASH_CACHE_OS_NAME=$(printf '%q' "${DASH_CACHE_OS_NAME:-Linux}")
+DASH_CACHE_UPTIME=$(printf '%q' "${DASH_CACHE_UPTIME:-unknown}")
+DASH_CACHE_CPU_LOAD=$(printf '%q' "${DASH_CACHE_CPU_LOAD:-0.00}")
+DASH_CACHE_CPU_CORES=${DASH_CACHE_CPU_CORES:-1}
+DASH_CACHE_RAM_PCT=$(printf '%q' "${DASH_CACHE_RAM_PCT:-0}")
+DASH_CACHE_RAM_USED=$(printf '%q' "${DASH_CACHE_RAM_USED:-0 / 0}")
+DASH_CACHE_DISK_PCT=$(printf '%q' "${DASH_CACHE_DISK_PCT:-0}")
+DASH_CACHE_TOTAL_USERS=${DASH_CACHE_TOTAL_USERS:-0}
+DASH_CACHE_ONLINE_USERS=${DASH_CACHE_ONLINE_USERS:-0}
+DASH_CACHE_LOCATION=$(printf '%q' "${DASH_CACHE_LOCATION:-N/A}")
+DASH_CACHE_ISP=$(printf '%q' "${DASH_CACHE_ISP:-N/A}")
+DASH_CACHE_PUBLIC_IP=$(printf '%q' "${DASH_CACHE_PUBLIC_IP:-N/A}")
+DASH_CACHE_DOMAIN=$(printf '%q' "${DASH_CACHE_DOMAIN:-None}")
+EOF
+}
+
 main_menu() {
+    local cache_file="/tmp/pgy_menu_cache_${UID}_$$.env"
+
+    # Show animated loading spinner on initial launch
+    if [[ -t 1 && "${PGY_MENU_LOADED:-false}" != "true" ]]; then
+        PGY_MENU_LOADED=true
+        printf '\033[?25l' 2>/dev/null || true
+        (
+            preload_dashboard_data "$cache_file"
+        ) >/dev/null 2>&1 &
+        local load_pid=$!
+        local -a frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local f_idx=0
+        while kill -0 "$load_pid" 2>/dev/null; do
+            printf '\r\033[2K  \033[38;2;0;212;255m%s\033[0m \033[1;37mMemuat Konten & Memeriksa Pembaruan...\033[0m' "${frames[$f_idx]}"
+            f_idx=$(( (f_idx + 1) % ${#frames[@]} ))
+            sleep 0.08
+        done
+        wait "$load_pid" 2>/dev/null || true
+        printf '\r\033[2K\033[?25h' 2>/dev/null || true
+        if [[ -f "$cache_file" ]]; then
+            # shellcheck source=/dev/null
+            source "$cache_file"
+            rm -f "$cache_file" 2>/dev/null || true
+        fi
+    fi
+
     while true; do
         export UNINSTALL_MODE="interactive"
 
         # Check License before rendering main menu
-        if ! pgy_license_guard_preflight "menu"; then
+        if [[ "${PGY_LICENSE_BLOCKED:-0}" -ne 0 ]]; then
             pgy_display_license_block_screen
             echo
             read -r -p "$(echo -e ${C_PROMPT}"  Tekan [Enter] untuk cek ulang atau [Ctrl+C] untuk keluar... "${C_RESET})" || exit 0
+            PGY_MENU_LOADED=false
             continue
         fi
 
