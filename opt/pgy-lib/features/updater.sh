@@ -52,23 +52,28 @@ show_script_update_box_if_available() {
 }
 
 update_script() {
+    clear; show_banner
     pgy_screen_title "UPDATE SCRIPT" "Memperbarui modul dan binary script ProgoCloud"
 
     if [[ $EUID -ne 0 ]]; then
-        echo -e "${C_RED}[ERROR] Update script harus dijalankan sebagai root.${C_RESET}"
+        echo
+        pgy_message ERROR "Update script harus dijalankan sebagai root."
+        press_enter
         return 1
     fi
 
     # Preflight license check before updating
-    pgy_section "VALIDASI LISENSI"
     if ! pgy_license_guard_preflight "setup"; then
         pgy_display_license_block_screen
         return 1
     fi
-    pgy_message ok "Lisensi VPS valid dan aktif."
 
-    pgy_section "PEMBARUAN SCRIPT"
-    echo -e "  Mengunduh pembaruan script terbaru dari server repository..."
+    echo
+    pgy_box_top "$C_CYAN"
+    pgy_box_header "PROSES PEMBARUAN" "$C_CYAN"
+    pgy_box_divider "$C_CYAN"
+    pgy_row "[1/3] Memeriksa validasi lisensi VPS... [OK]" "$C_CYAN"
+    pgy_row "[2/3] Mengunduh paket pembaruan dari repository..." "$C_CYAN"
 
     local work_dir
     work_dir="$(mktemp -d /tmp/pgy-update.XXXXXX)"
@@ -84,11 +89,9 @@ update_script() {
     local download_ok=false
     if command -v git >/dev/null 2>&1 && git clone --depth=1 -b main "${repo_url}" "${src_dir}" >/dev/null 2>&1; then
         download_ok=true
-        echo -e "  Repository berhasil diunduh via Git."
     fi
 
     if [[ "$download_ok" == false ]]; then
-        echo -e "  Mengunduh arsip paket rilis..."
         mkdir -p "${src_dir}"
         if curl -fsSL --retry 3 --max-time 30 "https://github.com/mycode212/new-script-ssh/archive/refs/heads/main.tar.gz?t=$(date +%s)" | tar -xz -C "${src_dir}" --strip-components=1 2>/dev/null; then
             download_ok=true
@@ -96,11 +99,15 @@ update_script() {
     fi
 
     if [[ "$download_ok" == false || ! -d "${src_dir}/opt/pgy-lib" || ! -f "${src_dir}/menu.sh" ]]; then
-        pgy_message danger "Gagal mengunduh atau struktur berkas pembaruan tidak lengkap."
+        pgy_row "[!] Gagal mengunduh berkas pembaruan." "$C_RED"
+        pgy_box_bot "$C_RED"
+        echo
+        pgy_message ERROR "Gagal mengunduh atau struktur pembaruan tidak lengkap."
+        press_enter
         return 1
     fi
 
-    echo -e "  Sinkronisasi modul /pgy-lib/opt dan binary sistem..."
+    pgy_row "[3/3] Menyinkronkan seluruh modul dan layanan..." "$C_CYAN"
     mkdir -p /pgy-lib/opt "${PGY_LIB_DIR}" "${DB_DIR}"
 
     # Perform atomic sync of modules to /pgy-lib/opt and /usr/local/lib/pgy-ssh-tunnel
@@ -173,18 +180,21 @@ EOF
         refresh_dynamic_banner_routing_if_enabled >/dev/null 2>&1 || true
     fi
 
+    pgy_box_bot "$C_CYAN"
+
     local new_ver
-    new_ver="$(get_pgy_installed_version 2>/dev/null || echo "0.0.9")"
+    new_ver="$(get_pgy_installed_version 2>/dev/null || echo "0.1.0")"
 
     echo
     pgy_box_top "$C_GREEN"
     pgy_box_header "UPDATE BERHASIL" "$C_GREEN" "$C_GREEN"
     pgy_box_divider "$C_GREEN"
-    pgy_row "Seluruh modul dan berkas script berhasil diperbarui!" "$C_GREEN"
-    pgy_row "$(printf "${C_GRAY}Versi Aktif:${C_RESET} ${C_WHITE}${C_BOLD}%s${C_RESET}" "${new_ver}")" "$C_GREEN"
+    pgy_detail "Status" "Berhasil Diperbarui" "$C_GREEN"
+    pgy_detail "Versi Aktif" "$new_ver" "$C_GREEN"
+    pgy_box_divider "$C_GREEN"
+    pgy_row "${C_GRAY}Memuat ulang menu console dalam 2 detik...${C_RESET}" "$C_GREEN"
     pgy_box_bot "$C_GREEN"
     echo
-    echo -e "  ${C_YELLOW}Memuat ulang menu console...${C_RESET}"
-    sleep 1.5
+    sleep 2
     exec /usr/local/bin/menu
 }
