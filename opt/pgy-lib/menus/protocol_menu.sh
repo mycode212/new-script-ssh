@@ -27,11 +27,20 @@ protocol_menu() {
             openvpn_status="Attention"; openvpn_color="$C_YELLOW"
         fi
 
+        local warp_status="Inactive" warp_color="$C_RED"
+        local adblock_status="Inactive" adblock_color="$C_RED"
+        if declare -F pgy_warp_is_active >/dev/null 2>&1 && pgy_warp_is_active; then
+            warp_status="Active"; warp_color="$C_GREEN"
+        fi
+        if declare -F pgy_adblock_is_active >/dev/null 2>&1 && pgy_adblock_is_active; then
+            adblock_status="Active"; adblock_color="$C_GREEN"
+        fi
+
         echo
         pgy_box_top
         pgy_box_header "PROTOCOL & PANEL MANAGEMENT"
         pgy_box_divider
-        pgy_row "${C_GRAY}TUNNELLING PROTOCOLS${C_RESET}"
+        pgy_row "${C_GRAY}TUNNELLING & NETWORK PROTOCOLS${C_RESET}"
         pgy_menu_status "[ 1]" "Install badvpn (UDP 7300)" "$badvpn_status" "$badvpn_color"
         pgy_menu1 "[ 2]" "Uninstall badvpn"
         pgy_menu_status "[ 3]" "Install HAProxy (${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT})" "$ssl_tunnel_status" "$ssl_tunnel_color"
@@ -44,6 +53,8 @@ protocol_menu() {
         if declare -F pgy_openvpn_menu >/dev/null 2>&1; then
             pgy_menu_status "[10]" "OpenVPN Protocol Suite" "$openvpn_status" "$openvpn_color"
         fi
+        pgy_menu_status "[11]" "Cloudflare WARP Suite" "$warp_status" "$warp_color"
+        pgy_menu_status "[12]" "Server-Side Adblocker" "$adblock_status" "$adblock_color"
         pgy_box_divider
         pgy_menu1 "[ 0]" "Return to Main Menu"
         pgy_box_bot
@@ -59,6 +70,8 @@ protocol_menu() {
             7) nginx_proxy_menu ;;
             8) pgy_run_action install_zivpn ;; 9) pgy_run_action uninstall_zivpn ;;
             10) if declare -F pgy_openvpn_menu >/dev/null 2>&1; then pgy_openvpn_menu; else invalid_option; fi ;;
+            11) if declare -F warp_management_menu >/dev/null 2>&1; then warp_management_menu; else invalid_option; fi ;;
+            12) if declare -F adblock_management_menu >/dev/null 2>&1; then adblock_management_menu; else invalid_option; fi ;;
             0) return ;;
             *) invalid_option ;;
         esac

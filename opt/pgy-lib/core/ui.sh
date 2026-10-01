@@ -151,6 +151,34 @@ pgy_kv2() {
 }
 tdz_kv2() { pgy_kv2 "$@"; }
 
+pgy_svc_badge() {
+    local name="$1" active="${2:-false}"
+    if [[ "$active" == "true" ]]; then
+        printf "${C_GRAY}%-8s :${C_RESET} ${C_GREEN}● ONLINE${C_RESET}" "$name"
+    else
+        printf "${C_GRAY}%-8s :${C_RESET} ${C_RED}○ OFFLINE${C_RESET}" "$name"
+    fi
+}
+
+pgy_svc2() {
+    local name1="$1" act1="$2" name2="$3" act2="$4" color="${5:-$C_CYAN}"
+    local w1=$(( (PGY_BOX_WIDTH - 5) / 2 ))
+    local w2=$(( (PGY_BOX_WIDTH - 5) - w1 ))
+    local b1 b2
+    b1=$(pgy_svc_badge "$name1" "$act1")
+    b2=$(pgy_svc_badge "$name2" "$act2")
+    local c1w c2w
+    c1w=$(_pgy_w "$b1")
+    c2w=$(_pgy_w "$b2")
+    local pad1=$(( w1 - c1w ))
+    local pad2=$(( w2 - c2w ))
+    local sp1="" sp2=""
+    (( pad1 > 0 )) && printf -v sp1 "%${pad1}s" ""
+    (( pad2 > 0 )) && printf -v sp2 "%${pad2}s" ""
+    printf "  ${color}║${C_RESET} %s%s ${color}│${C_RESET} %s%s ${color}║${C_RESET}\n" "$b1" "$sp1" "$b2" "$sp2"
+}
+tdz_svc2() { pgy_svc2 "$@"; }
+
 pgy_menu2() {
     local key1="$1" label1="$2" key2="$3" label2="$4" color="${5:-$C_CYAN}"
     local w1=$(( (PGY_BOX_WIDTH - 5) / 2 ))

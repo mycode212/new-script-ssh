@@ -58,8 +58,16 @@ source "${PGY_MODULE_ROOT}/features/monitor.sh"
 source "${PGY_MODULE_ROOT}/features/uninstall.sh"
 # shellcheck source=/dev/null
 source "${PGY_MODULE_ROOT}/features/updater.sh"
+# shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/features/warp.sh" ]] && source "${PGY_MODULE_ROOT}/features/warp.sh"
+# shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/features/adblock.sh" ]] && source "${PGY_MODULE_ROOT}/features/adblock.sh"
 
 # Load menu controllers
+# shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/menus/warp_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/warp_menu.sh"
+# shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/menus/adblock_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/adblock_menu.sh"
 # shellcheck source=/dev/null
 source "${PGY_MODULE_ROOT}/menus/protocol_menu.sh"
 # shellcheck source=/dev/null

@@ -105,16 +105,6 @@ main_menu() {
         # ── Refresh caches ─────────────────────────────────────────────
         refresh_dashboard_cache 2>/dev/null || true
 
-        # ── Service status pills (● = running, ○ = stopped) ───────────
-        local pill_haprx="${C_STATUS_I}○${C_RESET}"  pill_nginx="${C_STATUS_I}○${C_RESET}"
-        local pill_ws="${C_STATUS_I}○${C_RESET}"     pill_badvpn="${C_STATUS_I}○${C_RESET}"
-        local pill_dnstt="${C_STATUS_I}○${C_RESET}"
-        if systemctl is-active --quiet haproxy 2>/dev/null; then pill_haprx="${C_STATUS_A}●${C_RESET}"; fi
-        if systemctl is-active --quiet nginx 2>/dev/null; then pill_nginx="${C_STATUS_A}●${C_RESET}"; fi
-        if systemctl is-active --quiet pgy-ws-ssh-bridge 2>/dev/null; then pill_ws="${C_STATUS_A}●${C_RESET}"; fi
-        if systemctl is-active --quiet badvpn 2>/dev/null; then pill_badvpn="${C_STATUS_A}●${C_RESET}"; fi
-        if systemctl is-active --quiet dnstt 2>/dev/null; then pill_dnstt="${C_STATUS_A}●${C_RESET}"; fi
-
         # ── SECTION 1: SERVER PROFILE ──
         local _cpu_core_word="CORE"
         if [[ "${DASH_CACHE_CPU_CORES:-1}" -gt 1 ]]; then
@@ -137,12 +127,26 @@ main_menu() {
         pgy_kv2 "ACCT"   "${DASH_CACHE_TOTAL_USERS} total" "ONLINE" "${DASH_CACHE_ONLINE_USERS} now"
         pgy_box_bot
 
-        # ── SECTION 2: SERVICE STATUS (live pills) ────────────────────
+        # ── SECTION 2: SERVICE STATUS (live indicators) ───────────────
+        local act_xray=false act_nginx=false act_haprx=false act_ws=false
+        local act_badvpn=false act_warp=false act_dnstt=false act_adblock=false
+        if systemctl is-active --quiet xray 2>/dev/null; then act_xray=true; fi
+        if systemctl is-active --quiet nginx 2>/dev/null; then act_nginx=true; fi
+        if systemctl is-active --quiet haproxy 2>/dev/null; then act_haprx=true; fi
+        if systemctl is-active --quiet pgy-ws-ssh-bridge 2>/dev/null; then act_ws=true; fi
+        if systemctl is-active --quiet badvpn 2>/dev/null; then act_badvpn=true; fi
+        if systemctl is-active --quiet wireproxy 2>/dev/null || systemctl is-active --quiet warp-svc 2>/dev/null; then act_warp=true; fi
+        if systemctl is-active --quiet dnstt 2>/dev/null || systemctl is-active --quiet dnstt.service 2>/dev/null; then act_dnstt=true; fi
+        if systemctl is-active --quiet dnsmasq 2>/dev/null || systemctl is-active --quiet pgy-adblock 2>/dev/null; then act_adblock=true; fi
+
         echo
         pgy_box_top
         pgy_box_header "SERVICE STATUS"
         pgy_box_divider
-        pgy_row "${pill_haprx} HAProxy ${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT}   ${pill_nginx} Nginx ${NGINX_INTERNAL_TLS_PORT}   ${pill_ws} WS-Bridge ${WS_SSH_BRIDGE_PORT}"
+        pgy_svc2 "XRAY" "$act_xray" "NGINX" "$act_nginx"
+        pgy_svc2 "HAPROXY" "$act_haprx" "SSH WS" "$act_ws"
+        pgy_svc2 "BADVPN" "$act_badvpn" "WARP" "$act_warp"
+        pgy_svc2 "SLOWDNS" "$act_dnstt" "ADBLOCK" "$act_adblock"
         pgy_box_bot
 
         # ── SECTION 3: USER MANAGEMENT ────────────────────────────────
