@@ -106,7 +106,6 @@ rollback_dnstt_failed_install() {
 
 install_dnstt() {
     local disable_systemd_resolved=false
-    clear; show_banner
     pgy_screen_title "INSTALL DNSTT" "Configure DNS tunnelling on UDP port 53."
     if [ -f "$DNSTT_SERVICE_FILE" ]; then
         echo -e "\n${C_YELLOW}[INFO] DNSTT is already installed.${C_RESET}"

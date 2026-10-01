@@ -198,12 +198,12 @@ tdz_remove_recorded_firewall_rules() { pgy_remove_recorded_firewall_rules "$@"; 
 
 check_and_open_firewall_port() {
     local port="$1" proto="${2:-tcp}"
-    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
         ufw allow "${port}/${proto}" >/dev/null 2>&1 || true
         pgy_record_firewall_rule "ufw" "$proto" "$port"
     elif command -v iptables >/dev/null 2>&1; then
-        iptables -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || {
-            iptables -I INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || true
+        iptables -C INPUT -p "$proto" --dport "$port" -j ACCEPT >/dev/null 2>&1 || {
+            iptables -I INPUT -p "$proto" --dport "$port" -j ACCEPT >/dev/null 2>&1 || true
             pgy_record_firewall_rule "iptables" "$proto" "$port"
         }
     fi
@@ -211,11 +211,11 @@ check_and_open_firewall_port() {
 
 check_and_open_firewall_port_range() {
     local start="$1" end="$2" proto="${3:-udp}"
-    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
         ufw allow "${start}:${end}/${proto}" >/dev/null 2>&1 || true
     elif command -v iptables >/dev/null 2>&1; then
-        iptables -C INPUT -p "$proto" --dport "${start}:${end}" -j ACCEPT 2>/dev/null || {
-            iptables -I INPUT -p "$proto" --dport "${start}:${end}" -j ACCEPT 2>/dev/null || true
+        iptables -C INPUT -p "$proto" --dport "${start}:${end}" -j ACCEPT >/dev/null 2>&1 || {
+            iptables -I INPUT -p "$proto" --dport "${start}:${end}" -j ACCEPT >/dev/null 2>&1 || true
         }
     fi
 }

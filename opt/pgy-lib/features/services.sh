@@ -66,7 +66,6 @@ ensure_badvpn_service_is_quiet() {
 }
 
 install_badvpn() {
-    clear; show_banner
     pgy_screen_title "INSTALL BADVPN" "Build and enable the udpgw service on UDP port 7300."
     if [ -f "$BADVPN_SERVICE_FILE" ]; then
         echo -e "\n${C_YELLOW}[INFO] badvpn is already installed.${C_RESET}"
@@ -490,7 +489,6 @@ uninstall_pgy_ws_ssh_bridge() {
 
 
 install_ssl_tunnel() {
-    clear; show_banner
     pgy_screen_title "INSTALL HAPROXY EDGE STACK" \
         "Public ${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT} → Nginx ${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}"
     pgy_section "EDGE LAYOUT"
@@ -626,7 +624,6 @@ uninstall_ssl_tunnel() {
 
 
 install_zivpn() {
-    clear; show_banner
     pgy_screen_title "INSTALL ZIVPN" "Configure the UDP VPN service on port 5667."
     
     if [ -f "$ZIVPN_SERVICE_FILE" ]; then
@@ -934,7 +931,6 @@ purge_nginx() {
 }
 
 install_nginx_proxy() {
-    clear; show_banner
     pgy_screen_title "CONFIGURE INTERNAL NGINX" \
         "Backend ports: ${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}"
     echo -e "\n${C_CYAN}This keeps HAProxy on ${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT} and rewrites the internal Nginx proxy on ${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}.${C_RESET}"
@@ -975,7 +971,6 @@ install_nginx_proxy() {
 }
 
 request_certbot_ssl() {
-    clear; show_banner
     pgy_screen_title "SHARED CERTBOT CERTIFICATE" "Apply one certificate to HAProxy and internal Nginx."
     echo -e "\n${C_DIM}This will replace the shared certificate used by HAProxy on ${EDGE_PUBLIC_TLS_PORT} and internal Nginx on ${NGINX_INTERNAL_TLS_PORT}.${C_RESET}"
 
