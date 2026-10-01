@@ -33,7 +33,7 @@ C_STATUS_I=$C_GRAY
 C_ACCENT=$C_CYAN
 
 # Box Dimensions
-PGY_BOX_MAX_WIDTH=64
+PGY_BOX_MAX_WIDTH=68
 PGY_BOX_WIDTH=$PGY_BOX_MAX_WIDTH
 TDZ_BOX_MAX_WIDTH=$PGY_BOX_MAX_WIDTH
 TDZ_BOX_WIDTH=$PGY_BOX_WIDTH
@@ -45,7 +45,7 @@ pgy_refresh_box_width() {
         if [[ "$terminal_columns" =~ ^[0-9]+$ ]]; then
             PGY_BOX_WIDTH=$((terminal_columns - 4))
             (( PGY_BOX_WIDTH > PGY_BOX_MAX_WIDTH )) && PGY_BOX_WIDTH=$PGY_BOX_MAX_WIDTH
-            (( PGY_BOX_WIDTH < 24 )) && PGY_BOX_WIDTH=24
+            (( PGY_BOX_WIDTH < 30 )) && PGY_BOX_WIDTH=30
         else
             PGY_BOX_WIDTH=$PGY_BOX_MAX_WIDTH
         fi

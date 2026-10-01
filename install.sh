@@ -58,7 +58,7 @@ HAD_OLD_DROPIN=false
 SSH_CHANGED=false
 FINISHED=false
 
-BOX_MAX_WIDTH=64
+BOX_MAX_WIDTH=68
 BOX_WIDTH=$BOX_MAX_WIDTH
 if [[ -t 1 ]]; then
     terminal_columns=${COLUMNS:-}
@@ -66,7 +66,7 @@ if [[ -t 1 ]]; then
     if [[ "$terminal_columns" =~ ^[0-9]+$ ]]; then
         BOX_WIDTH=$((terminal_columns - 4))
         (( BOX_WIDTH > BOX_MAX_WIDTH )) && BOX_WIDTH=$BOX_MAX_WIDTH
-        (( BOX_WIDTH < 24 )) && BOX_WIDTH=24
+        (( BOX_WIDTH < 30 )) && BOX_WIDTH=30
     fi
 fi
 
@@ -128,9 +128,18 @@ pgy_box_header() {
 
 pgy_row() {
     local content="$1" color="${2:-$C_CYAN}"
-    local cw
-    cw=$(_pgy_w "$content")
-    local pad=$(( BOX_WIDTH - cw - 2 ))
+    local max_inner=$(( BOX_WIDTH - 2 ))
+    local clean cw
+    clean=$(_pgy_strip_ansi "$content")
+    cw=${#clean}
+    if (( cw > max_inner )); then
+        local raw_diff=$(( cw - max_inner ))
+        # If too long, truncate string safely
+        clean="${clean:0:$max_inner}"
+        content="${clean}"
+        cw=${#clean}
+    fi
+    local pad=$(( max_inner - cw ))
     local spaces=""
     if (( pad > 0 )); then
         printf -v spaces "%${pad}s" ""
@@ -228,11 +237,12 @@ except Exception as e:
         pgy_row "$(printf "${C_GRAY}IP VPS :${C_RESET} ${C_WHITE}%s${C_RESET}" "${lic_ip:-N/A}")" "$C_DANGER"
         pgy_box_divider "$C_DANGER"
         pgy_row "$(printf "${C_YELLOW}[license] %s: %s${C_RESET}" "${lic_status:-denied}" "${lic_reason}")" "$C_DANGER"
-        pgy_row "$(printf "${C_YELLOW}  Tindakan: Daftarkan IP di %s${C_RESET}" "$PGY_LICENSE_PORTAL_URL")" "$C_DANGER"
+        pgy_row "$(printf "${C_YELLOW}Tindakan : Daftarkan IP di portal lisensi${C_RESET}")" "$C_DANGER"
+        pgy_row "$(printf "${C_YELLOW}Portal   : %s${C_RESET}" "$PGY_LICENSE_PORTAL_URL")" "$C_DANGER"
         pgy_box_divider "$C_DANGER"
         pgy_row "$(printf "${C_WHITE}Untuk aktivasi atau perpanjangan lisensi, hubungi:${C_RESET}")" "$C_DANGER"
-        pgy_row "$(printf "${C_CYAN}Telegram  :${C_RESET} ${C_WHITE}https://t.me/progocloud${C_RESET}")" "$C_DANGER"
-        pgy_row "$(printf "${C_CYAN}Website   :${C_RESET} ${C_WHITE}%s${C_RESET}" "$PGY_LICENSE_PORTAL_URL")" "$C_DANGER"
+        pgy_row "$(printf "${C_CYAN}Telegram :${C_RESET} ${C_WHITE}https://t.me/progocloud${C_RESET}")" "$C_DANGER"
+        pgy_row "$(printf "${C_CYAN}Website  :${C_RESET} ${C_WHITE}%s${C_RESET}" "$PGY_LICENSE_PORTAL_URL")" "$C_DANGER"
         pgy_box_bot "$C_DANGER"
         echo
         echo -e "  ${C_RED}[ERROR] Proses instalasi dihentikan karena IP VPS belum terdaftar aktif di ProgoCloud.${C_RESET}\n"

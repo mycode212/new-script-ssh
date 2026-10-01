@@ -101,21 +101,21 @@ pgy_display_license_block_screen() {
     pgy_box_divider "$C_DANGER"
     
     local ip_val
-    ip_val=$(curl -4 -s --max-time 4 ifconfig.me 2>/dev/null || echo "N/A")
-    pgy_row "$(printf "${C_GRAY}IP VPS :${C_RESET} ${C_WHITE}%s${C_RESET}" "$ip_val")" "$C_DANGER"
+    ip_val=$(curl -4 -s --max-time 4 ifconfig.me 2>/dev/null || curl -4 -s --max-time 4 api.ipify.org 2>/dev/null || echo "N/A")
+    pgy_row "$(printf "${C_GRAY}IP VPS   :${C_RESET} ${C_WHITE}%s${C_RESET}" "$ip_val")" "$C_DANGER"
     pgy_box_divider "$C_DANGER"
     
     if [[ -n "${PGY_LICENSE_BLOCK_REASON}" ]]; then
         while IFS= read -r line; do
             [[ -n "$line" ]] || continue
-            pgy_row "$(printf "${C_YELLOW}%s${C_RESET}" "${line:0:$((PGY_BOX_WIDTH-4))}")" "$C_DANGER"
+            pgy_row "$(printf "${C_YELLOW}%s${C_RESET}" "$line")" "$C_DANGER"
         done <<< "${PGY_LICENSE_BLOCK_REASON}"
         pgy_box_divider "$C_DANGER"
     fi
 
     pgy_row "$(printf "${C_WHITE}Untuk aktivasi atau perpanjangan lisensi, hubungi:${C_RESET}")" "$C_DANGER"
-    pgy_row "$(printf "${C_CYAN}Telegram  :${C_RESET} ${C_WHITE}https://t.me/progocloud${C_RESET}")" "$C_DANGER"
-    pgy_row "$(printf "${C_CYAN}Website   :${C_RESET} ${C_WHITE}https://autoscript-license-3xj.pages.dev${C_RESET}")" "$C_DANGER"
+    pgy_row "$(printf "${C_CYAN}Telegram :${C_RESET} ${C_WHITE}https://t.me/progocloud${C_RESET}")" "$C_DANGER"
+    pgy_row "$(printf "${C_CYAN}Website  :${C_RESET} ${C_WHITE}https://autoscript-license-3xj.pages.dev${C_RESET}")" "$C_DANGER"
     pgy_box_bot "$C_DANGER"
     echo
 }

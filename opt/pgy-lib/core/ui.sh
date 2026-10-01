@@ -47,9 +47,16 @@ tdz_box_header() { pgy_box_header "$@"; }
 
 pgy_row() {
     local content="$1" color="${2:-$C_CYAN}"
-    local cw
-    cw=$(_pgy_w "$content")
-    local pad=$(( PGY_BOX_WIDTH - cw - 2 ))
+    local max_inner=$(( PGY_BOX_WIDTH - 2 ))
+    local clean cw
+    clean=$(_pgy_strip_ansi "$content")
+    cw=${#clean}
+    if (( cw > max_inner )); then
+        clean="${clean:0:$max_inner}"
+        content="${clean}"
+        cw=${#clean}
+    fi
+    local pad=$(( max_inner - cw ))
     local spaces=""
     if (( pad > 0 )); then
         printf -v spaces "%${pad}s" ""
