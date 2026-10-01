@@ -1,0 +1,582 @@
+#!/usr/bin/env python3
+"""Auto Script SSH By : ProgoCloud - License Check Engine
+Verifies VPS Public IP against ProgoCloud License API.
+"""
+
+import argparse
+import datetime as dt
+import ipaddress
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from contextlib import contextmanager
+from pathlib import Path
+
+
+DEFAULTS = {
+    "PGY_LICENSE_CONFIG_FILE": "/etc/pgytunnel/license/config.env",
+    "PGY_LICENSE_STATE_FILE": "/var/lib/pgy-license/state.json",
+    "PGY_LICENSE_CACHE_FILE": "/var/lib/pgy-license/cache.json",
+    "PGY_LICENSE_STOPPED_SERVICES_FILE": "/var/lib/pgy-license/stopped-services.json",
+    "PGY_LICENSE_DEFAULT_API_URL": "https://autoscript-license.worker-balancer-mang.workers.dev/api/v1/license/check",
+    "PGY_LICENSE_API_URL": "",
+    "PGY_LICENSE_CACHE_TTL_SEC": "3600",
+    "PGY_LICENSE_RUNTIME_ENFORCE": "true",
+}
+
+TRUSTED_DEFAULT_API_URL = "https://autoscript-license.worker-balancer-mang.workers.dev/api/v1/license/check"
+RENEW_PORTAL_URL = "https://autoscript.license.dpdns.org"
+SUPPORT_CONTACT = "ProgoCloud Support (https://t.me/progocloud)"
+
+IP_SOURCES = (
+    "https://api.ipify.org",
+    "https://ipv4.icanhazip.com",
+    "https://ifconfig.me/ip",
+)
+IP_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+EDGE_ERROR_CODE_RE = re.compile(r"\berror code\s*:\s*(\d{3,5})\b", re.IGNORECASE)
+RETRYABLE_ERROR_RE = re.compile(
+    r"(timed?\s*out|temporar|connection reset|connection aborted|network is unreachable|name or service not known)",
+    re.IGNORECASE,
+)
+
+
+def utcnow():
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def isoformat_z(value):
+    return value.astimezone(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_iso8601(value):
+    if not value:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def parse_bool(value, default=False):
+    if value is None:
+        return default
+    raw = str(value).strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def parse_int(value, default):
+    try:
+        return max(1, int(str(value).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+def normalize_ipv4(value):
+    raw = str(value or "").strip()
+    if not raw or not IP_RE.fullmatch(raw):
+        return ""
+    try:
+        ip = ipaddress.ip_address(raw)
+    except ValueError:
+        return ""
+    if ip.version != 4:
+        return ""
+    return str(ip)
+
+
+def read_env_file(path):
+    result = {}
+    p = Path(path)
+    if not p.is_file():
+        return result
+    for raw_line in p.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
+            value = value[1:-1]
+        result[key] = value
+    return result
+
+
+def load_config():
+    cfg = dict(DEFAULTS)
+    env_cfg_file = os.environ.get("PGY_LICENSE_CONFIG_FILE") or DEFAULTS["PGY_LICENSE_CONFIG_FILE"]
+    cfg.update(read_env_file(env_cfg_file))
+    for key, default in DEFAULTS.items():
+        cfg[key] = os.environ.get(key, cfg.get(key, default))
+    cfg["PGY_LICENSE_CONFIG_FILE"] = os.environ.get("PGY_LICENSE_CONFIG_FILE", env_cfg_file)
+    cfg["PGY_LICENSE_DEFAULT_API_URL"] = TRUSTED_DEFAULT_API_URL
+    cfg["PGY_LICENSE_API_URL"] = os.environ.get("PGY_LICENSE_API_URL", TRUSTED_DEFAULT_API_URL)
+    cfg["runtime_enforce"] = parse_bool(cfg.get("PGY_LICENSE_RUNTIME_ENFORCE"), True)
+    cfg["cache_ttl_sec"] = parse_int(cfg.get("PGY_LICENSE_CACHE_TTL_SEC"), 3600)
+    return cfg
+
+
+def load_json(path):
+    p = Path(path)
+    if not p.is_file():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def write_json_atomic(path, payload, mode=0o600):
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp.", suffix=".json", dir=str(p.parent))
+    tmp_path = Path(tmp)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp_path, mode)
+        os.replace(tmp_path, p)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+
+@contextmanager
+def force_ipv4_network():
+    original_getaddrinfo = socket.getaddrinfo
+
+    def getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+        infos = original_getaddrinfo(host, port, family, type, proto, flags)
+        ipv4_infos = [info for info in infos if info[0] == socket.AF_INET]
+        return ipv4_infos or infos
+
+    socket.getaddrinfo = getaddrinfo_ipv4
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
+
+
+def fetch_text(url, headers=None, timeout=8):
+    req = urllib.request.Request(url, headers=headers or {}, method="GET")
+    with force_ipv4_network():
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            return response.status, body
+
+
+def parse_json_body(text):
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
+def extract_edge_error_code(payload, body):
+    if isinstance(payload, dict):
+        for key in ("message", "reason", "error"):
+            value = str(payload.get(key) or "").strip()
+            match = EDGE_ERROR_CODE_RE.search(value)
+            if match:
+                return match.group(1)
+    match = EDGE_ERROR_CODE_RE.search(str(body or ""))
+    if match:
+        return match.group(1)
+    return ""
+
+
+def summarize_http_error(status_code, payload, body):
+    parts = []
+    if isinstance(payload, dict):
+        for key in ("message", "reason", "error"):
+            value = str(payload.get(key) or "").strip()
+            if value and value not in parts:
+                parts.append(value)
+    if parts:
+        return f"HTTP {status_code}: {' | '.join(parts)}"
+    compact_body = " ".join(str(body or "").split())
+    if compact_body:
+        return f"HTTP {status_code}: {compact_body[:220]}"
+    return f"HTTP {status_code}"
+
+
+def post_json(url, payload, headers=None, timeout=10):
+    data = json.dumps(payload).encode("utf-8")
+    req_headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "pgy-ssh-license-check/1.0",
+    }
+    if headers:
+        req_headers.update(headers)
+    req = urllib.request.Request(url, data=data, headers=req_headers, method="POST")
+    try:
+        with force_ipv4_network():
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                body = response.read().decode("utf-8", errors="replace")
+                res_payload = parse_json_body(body)
+                if not isinstance(res_payload, dict):
+                    raise RuntimeError(f"Respons API bukan JSON valid (HTTP {response.status})")
+                return response.status, res_payload
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        res_payload = parse_json_body(body)
+        err = RuntimeError(summarize_http_error(exc.code, res_payload, body))
+        err.http_status = int(exc.code)
+        err.edge_error_code = extract_edge_error_code(res_payload, body)
+        raise err from exc
+    except urllib.error.URLError as exc:
+        err = RuntimeError(f"Koneksi API gagal: {exc.reason}")
+        err.http_status = None
+        err.edge_error_code = ""
+        raise err from exc
+
+
+def is_retryable_error(exc):
+    http_status = getattr(exc, "http_status", None)
+    if http_status is not None:
+        return int(http_status) >= 500
+    message = str(exc or "").strip()
+    if not message:
+        return False
+    return bool(RETRYABLE_ERROR_RE.search(message))
+
+
+def post_json_with_retry(url, payload, *, headers=None, timeout=10, attempts=3, backoff_sec=1.0):
+    last_error = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            return post_json(url, payload, headers=headers, timeout=timeout)
+        except Exception as exc:
+            last_error = exc
+            if attempt >= attempts or not is_retryable_error(exc):
+                raise
+            time.sleep(backoff_sec * attempt)
+    raise last_error
+
+
+def detect_public_ipv4():
+    for url in IP_SOURCES:
+        try:
+            _, body = fetch_text(url, timeout=5)
+        except Exception:
+            continue
+        candidate = normalize_ipv4(body.strip())
+        if candidate:
+            return candidate
+    return ""
+
+
+def load_last_known_public_ip(cfg):
+    for path_key in ("PGY_LICENSE_CACHE_FILE", "PGY_LICENSE_STATE_FILE"):
+        payload = load_json(cfg[path_key])
+        if not isinstance(payload, dict):
+            continue
+        public_ip = normalize_ipv4(payload.get("public_ip"))
+        if public_ip:
+            return public_ip
+    return ""
+
+
+def state_payload(
+    cfg,
+    *,
+    stage,
+    allowed,
+    status,
+    source,
+    reason,
+    public_ip,
+    checked_at,
+    cache_expires_at="",
+    enforcement_action="none",
+    stopped_services=None,
+    http_status=None,
+    edge_error_code="",
+):
+    return {
+        "allowed": bool(allowed),
+        "cache_expires_at": cache_expires_at or "",
+        "checked_at": checked_at,
+        "decision_source": source,
+        "edge_error_code": str(edge_error_code or ""),
+        "enforcement_action": enforcement_action,
+        "http_status": http_status,
+        "public_ip": public_ip or "",
+        "reason": reason or "",
+        "runtime_enforce": bool(cfg["runtime_enforce"]),
+        "stage": stage,
+        "status": status,
+        "stopped_services": list(stopped_services or []),
+    }
+
+
+def save_state(cfg, payload):
+    try:
+        write_json_atomic(cfg["PGY_LICENSE_STATE_FILE"], payload)
+    except (PermissionError, OSError):
+        return
+
+
+def save_cache(cfg, *, public_ip, reason, checked_at, ttl_sec):
+    expires_at = isoformat_z(utcnow() + dt.timedelta(seconds=ttl_sec))
+    payload = {
+        "allowed": True,
+        "cache_expires_at": expires_at,
+        "checked_at": checked_at,
+        "public_ip": public_ip,
+        "reason": reason or "",
+    }
+    try:
+        write_json_atomic(cfg["PGY_LICENSE_CACHE_FILE"], payload)
+    except (PermissionError, OSError):
+        return payload
+    return payload
+
+
+def load_valid_cache(cfg, public_ip):
+    cache = load_json(cfg["PGY_LICENSE_CACHE_FILE"])
+    if not isinstance(cache, dict):
+        return None
+    if not cache.get("allowed"):
+        return None
+    if (cache.get("public_ip") or "").strip() != public_ip:
+        return None
+    expires_at = parse_iso8601(cache.get("cache_expires_at"))
+    if expires_at is None or expires_at < utcnow():
+        return None
+    return cache
+
+
+def load_valid_cache_for_candidates(cfg, public_ips):
+    seen = set()
+    for candidate in public_ips:
+        normalized = normalize_ipv4(candidate)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        cache = load_valid_cache(cfg, normalized)
+        if cache is not None:
+            return cache, normalized
+    return None, ""
+
+
+def evaluate_license(cfg, *, stage, allow_disabled):
+    now = isoformat_z(utcnow())
+    api_url = (cfg.get("PGY_LICENSE_API_URL") or "").strip()
+    if not api_url:
+        payload = state_payload(
+            cfg,
+            stage=stage,
+            allowed=False,
+            status="disabled",
+            source="disabled",
+            reason="PGY_LICENSE_DEFAULT_API_URL kosong",
+            public_ip="",
+            checked_at=now,
+        )
+        save_state(cfg, payload)
+        return allow_disabled, payload
+
+    claimed_public_ip = detect_public_ipv4()
+    req_payload = {
+        "public_ipv4": claimed_public_ip,
+        "stage": stage,
+        "product": "progocloud-ssh",
+        "hostname": os.uname().nodename,
+    }
+
+    try:
+        status_code, response = post_json_with_retry(
+            api_url, req_payload, headers={}, timeout=10, attempts=3, backoff_sec=1.0
+        )
+        if status_code != 200 or not isinstance(response, dict):
+            raise RuntimeError(f"Respons API tidak valid (HTTP {status_code})")
+        if "allowed" not in response:
+            raise RuntimeError("Respons API tidak memiliki field 'allowed'")
+        allowed = bool(response.get("allowed"))
+        reason = str(response.get("reason") or "")
+        revoke_reason = str(response.get("revoke_reason") or "")
+        label = str(response.get("label") or "")
+        ttl_sec = parse_int(response.get("cache_ttl_sec"), cfg["cache_ttl_sec"])
+        public_ip = normalize_ipv4(response.get("public_ip")) or claimed_public_ip
+        cache_expires_at = ""
+        if allowed:
+            cache = save_cache(cfg, public_ip=public_ip, reason=reason, checked_at=now, ttl_sec=ttl_sec)
+            cache_expires_at = cache["cache_expires_at"]
+        payload = state_payload(
+            cfg,
+            stage=stage,
+            allowed=allowed,
+            status="allowed" if allowed else "denied",
+            source="api",
+            reason=reason or ("allowed" if allowed else "denied by API"),
+            public_ip=public_ip,
+            checked_at=now,
+            cache_expires_at=cache_expires_at,
+            http_status=200,
+        )
+        if revoke_reason:
+            payload["revoke_reason"] = revoke_reason
+        if label:
+            payload["label"] = label
+        save_state(cfg, payload)
+        return allowed, payload
+    except Exception as exc:
+        http_status = getattr(exc, "http_status", None)
+        edge_error_code = str(getattr(exc, "edge_error_code", "") or "")
+        cache_allowed = stage in ("runtime", "menu")
+        last_known_public_ip = load_last_known_public_ip(cfg)
+        cache, cache_public_ip = load_valid_cache_for_candidates(
+            cfg,
+            (claimed_public_ip, last_known_public_ip),
+        )
+        public_ip = cache_public_ip or claimed_public_ip or last_known_public_ip
+        if cache_allowed and cache is not None:
+            payload = state_payload(
+                cfg,
+                stage=stage,
+                allowed=True,
+                status="cache-allow",
+                source="cache",
+                reason=f"API offline/gagal, memakai cache valid",
+                public_ip=public_ip,
+                checked_at=now,
+                cache_expires_at=cache.get("cache_expires_at") or "",
+                http_status=http_status,
+                edge_error_code=edge_error_code,
+            )
+            save_state(cfg, payload)
+            return True, payload
+        payload = state_payload(
+            cfg,
+            stage=stage,
+            allowed=False,
+            status="error",
+            source="api",
+            reason=f"API gagal dan cache tidak valid: {exc}",
+            public_ip=public_ip,
+            checked_at=now,
+            http_status=http_status,
+            edge_error_code=edge_error_code,
+        )
+        save_state(cfg, payload)
+        return False, payload
+
+
+def next_action_for_state(state):
+    if not isinstance(state, dict):
+        return "run a license check"
+    status = str(state.get("status") or "").strip().lower()
+    reason = str(state.get("reason") or "").strip().lower()
+    if status in {"allowed", "cache-allow"}:
+        return "none"
+    if status == "denied":
+        if "revoked" in reason or "blocked" in reason:
+            return f"Hubungi {SUPPORT_CONTACT}"
+        if "expired" in reason:
+            return f"Perpanjang di {RENEW_PORTAL_URL}"
+        return f"Daftarkan IP di {RENEW_PORTAL_URL} atau hubungi {SUPPORT_CONTACT}"
+    if status == "error":
+        return "Periksa koneksi internet VPS"
+    return "Jalankan license check"
+
+
+def print_status_payload(state):
+    if not isinstance(state, dict):
+        print("Status : unknown")
+        print("Reason : no state available")
+        print("IP     : -")
+        print("Until  : -")
+        print("Next   : Jalankan pemeriksaan lisensi")
+        return 0
+
+    print(f"Status : {state.get('status', '-')}")
+    print(f"Reason : {state.get('reason', '-')}")
+    revoke_reason = state.get('revoke_reason')
+    if revoke_reason:
+        print(f"Detail : {revoke_reason}")
+    label = state.get('label')
+    print(f"IP     : {state.get('public_ip', '-')}{f' ({label})' if label else ''}")
+    print(f"Until  : {state.get('cache_expires_at', '-') or '-'}")
+    print(f"Next   : {next_action_for_state(state)}")
+    return 0
+
+
+def command_check(args):
+    cfg = load_config()
+    allowed, payload = evaluate_license(
+        cfg, stage=args.stage, allow_disabled=parse_bool(args.allow_disabled, False)
+    )
+    if allowed:
+        print(f"[license] {payload['status']}: {payload['reason']}")
+        return 0
+    next_action = next_action_for_state(payload)
+    reason_str = payload['reason']
+    revoke_reason = payload.get('revoke_reason')
+    if revoke_reason:
+        reason_str = f"{reason_str} (Detail: {revoke_reason})"
+    message = f"[license] {payload['status']}: {reason_str}"
+    if next_action not in {"none", "check license status", "run a license check"}:
+        message = f"{message}\n  Tindakan: {next_action}"
+    print(message, file=sys.stderr)
+    return 1
+
+
+def command_status(_args):
+    cfg = load_config()
+    try:
+        _, payload = evaluate_license(cfg, stage="menu", allow_disabled=False)
+        return print_status_payload(payload)
+    except Exception:
+        state = load_json(cfg["PGY_LICENSE_STATE_FILE"])
+        return print_status_payload(state)
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(prog="pgy-license-check")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    check = sub.add_parser("check")
+    check.add_argument("--stage", default="runtime", choices=["run", "setup", "menu", "runtime", "install"])
+    check.add_argument("--allow-disabled", default="false")
+    sub.add_parser("status")
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
+    if args.cmd == "check":
+        return command_check(args)
+    if args.cmd == "status":
+        return command_status(args)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
