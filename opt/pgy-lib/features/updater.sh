@@ -23,7 +23,7 @@ check_script_update_available() {
 
     local remote_ver=""
     remote_ver=$(curl -s --max-time 4 "${REPO_URL}/version.txt" 2>/dev/null | tr -d ' \r\n\t')
-    if [[ -n "$remote_ver" && "$remote_ver" != "$local_ver" ]]; then
+    if [[ -n "$remote_ver" ]] && pgy_is_newer_version "$remote_ver" "$local_ver"; then
         PGY_UPDATE_AVAILABLE=true
         PGY_LATEST_VERSION="$remote_ver"
     else
@@ -35,7 +35,7 @@ check_script_update_available() {
 show_script_update_box_if_available() {
     local local_ver
     local_ver="$(get_pgy_installed_version 2>/dev/null || echo "${PGY_SCRIPT_VERSION:-0.0.1}")"
-    if [[ "${PGY_UPDATE_AVAILABLE:-false}" == "true" && -n "${PGY_LATEST_VERSION:-}" && "${PGY_LATEST_VERSION}" != "$local_ver" ]]; then
+    if [[ "${PGY_UPDATE_AVAILABLE:-false}" == "true" && -n "${PGY_LATEST_VERSION:-}" ]] && pgy_is_newer_version "${PGY_LATEST_VERSION}" "$local_ver"; then
         echo
         pgy_box_top "$C_YELLOW"
         pgy_box_header "SCRIPT UPDATE" "$C_YELLOW" "$C_YELLOW"

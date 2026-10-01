@@ -12,6 +12,19 @@ die()  { echo -e "${RED:-$C_RED}[ERROR]${NC:-$C_RESET} $*" >&2; exit 1; }
 subtle() { echo -e "${YELLOW:-$C_YELLOW}$*${NC:-$C_RESET}"; }
 hr()   { echo "------------------------------------------------------------"; }
 
+# Check if remote version is strictly newer than local version
+pgy_is_newer_version() {
+    local remote="$1" local_ver="$2"
+    [[ -z "$remote" || -z "$local_ver" ]] && return 1
+    [[ "$remote" == "$local_ver" ]] && return 1
+    local newest
+    newest=$(printf '%s\n%s\n' "$local_ver" "$remote" | sort -V 2>/dev/null | tail -n1)
+    if [[ "$newest" == "$remote" && "$remote" != "$local_ver" ]]; then
+        return 0
+    fi
+    return 1
+}
+
 press_enter() {
     if [[ "${PGY_ACTION_PAUSE_GUARD:-${TDZ_ACTION_PAUSE_GUARD:-}}" == "active" ]]; then
         [[ "${PGY_ACTION_PAUSED:-${TDZ_ACTION_PAUSED:-false}}" == "true" ]] && return
