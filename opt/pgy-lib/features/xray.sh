@@ -101,6 +101,11 @@ pgy_xray_generate_base_config() {
         "wsSettings": {
           "path": "/vmess"
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
       }
     },
     {
@@ -117,6 +122,11 @@ pgy_xray_generate_base_config() {
         "wsSettings": {
           "path": "/vless"
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
       }
     },
     {
@@ -132,6 +142,11 @@ pgy_xray_generate_base_config() {
         "wsSettings": {
           "path": "/trojan"
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
       }
     },
     {
@@ -147,6 +162,11 @@ pgy_xray_generate_base_config() {
         "grpcSettings": {
           "serviceName": "vmess-grpc"
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
       }
     },
     {
@@ -163,6 +183,11 @@ pgy_xray_generate_base_config() {
         "grpcSettings": {
           "serviceName": "vless-grpc"
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
       }
     },
     {
@@ -178,6 +203,11 @@ pgy_xray_generate_base_config() {
         "grpcSettings": {
           "serviceName": "trojan-grpc"
         }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
       }
     }
   ],
@@ -322,9 +352,12 @@ custom_black_domains = ["geosite:category-ads-all"]
 try:
     with open("/etc/pgy-adblock/custom_blacklist.txt", "r", encoding="utf-8") as f:
         for line in f:
-            d = line.strip()
+            d = line.strip().lower()
             if d and not d.startswith("#"):
-                custom_black_domains.append(f"domain:{d}")
+                if not d.startswith("domain:") and not d.startswith("geosite:") and not d.startswith("full:") and not d.startswith("regexp:"):
+                    custom_black_domains.append(f"domain:{d}")
+                else:
+                    custom_black_domains.append(d)
 except Exception:
     pass
 
@@ -333,6 +366,11 @@ for rule in cfg.get("routing", {}).get("rules", []):
         rule["domain"] = custom_black_domains
 
 for ib in cfg.get("inbounds", []):
+    ib["sniffing"] = {
+        "enabled": True,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": True
+    }
     tag = ib.get("tag", "")
     if "vmess" in tag:
         ib.setdefault("settings", {})["clients"] = vmess_clients

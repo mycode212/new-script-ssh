@@ -104,7 +104,13 @@ pgy_adblock_get_status() {
 }
 
 pgy_adblock_apply_firewall() {
-    # Redirect DNS traffic (port 53) from SSH tunnel users to local Adblock resolver (port 5353)
+    # 1. Redirect inbound DNS queries from tun interfaces (OpenVPN / BadVPN / Tunnels)
+    iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
+        iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+    iptables -t nat -C PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
+        iptables -t nat -A PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+
+    # 2. Redirect outbound DNS queries from SSH tunnel users
     for grp in pgyusers tdzusers; do
         if getent group "$grp" >/dev/null 2>&1; then
             iptables -t nat -C OUTPUT -p udp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
@@ -116,6 +122,9 @@ pgy_adblock_apply_firewall() {
 }
 
 pgy_adblock_remove_firewall() {
+    iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+    iptables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+
     for grp in pgyusers tdzusers; do
         if getent group "$grp" >/dev/null 2>&1; then
             iptables -t nat -D OUTPUT -p udp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
