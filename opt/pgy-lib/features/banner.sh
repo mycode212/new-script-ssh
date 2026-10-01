@@ -296,17 +296,20 @@ set_ssh_banner_paste() {
 
 pgy_generate_user_banner() {
     local target_user="$1"
-    local banner_dir="/etc/pgytunnel/banners"
+    local banner_dir="${BANNER_DIR:-/etc/pgytunnel/banners}"
     mkdir -p "$banner_dir"
     load_banner_identity_config
 
     local user pass exp max_l quota trial_m trial_e _rest
+    local found=false
     if [[ -f "$DB_FILE" ]]; then
-        while IFS=: read -r user pass exp max_l quota trial_m trial_e _rest; do
+        while IFS=: read -r user pass exp max_l quota trial_m trial_e _rest || [[ -n "$user" ]]; do
+            user=$(echo "$user" | tr -d '\r\n[:space:]')
             [[ -n "$user" && "$user" != \#* ]] || continue
             if [[ -n "$target_user" && "$user" != "$target_user" ]]; then
                 continue
             fi
+            found=true
             
             local max_display="${max_l:-1}"
             local exp_display="${exp:-Never}"
@@ -336,6 +339,26 @@ EOF
 )
             write_banner_if_changed "$user" "$banner_content"
         done < "$DB_FILE"
+    fi
+
+    if [[ -n "$target_user" && "$found" == false ]]; then
+        local banner_content
+        banner_content=$(cat <<EOF
+<br><br>---------------------------------<br>
+<b>[!] ACCOUNT • DETAILS [!]</b><br>
+---------------------------------<br>
+<b>[-] Username:</b> ${target_user}<br>
+<b>[-] Status:</b> Active<br>
+<b>[-] Active Session:</b> 0/1<br>
+<b>[-] Expiration:</b> Never<br>
+<b>[-] Quota:</b> Unlimited<br>
+---------------------------------<br>
+<b>[-] Admin:</b> <a href="https://t.me/${BANNER_ADMIN_USERNAME}">@${BANNER_ADMIN_USERNAME}</a><br>
+<b>[-] Channel:</b> <a href="https://t.me/${BANNER_CHANNEL_USERNAME}">@${BANNER_CHANNEL_USERNAME}</a><br>
+---------------------------------
+EOF
+)
+        write_banner_if_changed "$target_user" "$banner_content"
     fi
 }
 

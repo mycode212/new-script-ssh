@@ -13,7 +13,7 @@ PGY_LATEST_VERSION="${PGY_SCRIPT_VERSION:-0.0.1}"
 check_script_update_available() {
     local now
     now=$(date +%s)
-    if (( PGY_UPDATE_CHECK_TS > 0 && now - PGY_UPDATE_CHECK_TS < 60 )); then
+    if (( PGY_UPDATE_CHECK_TS > 0 && now - PGY_UPDATE_CHECK_TS < 30 )); then
         return 0
     fi
     PGY_UPDATE_CHECK_TS=$now
@@ -22,7 +22,10 @@ check_script_update_available() {
     local_ver="$(get_pgy_installed_version 2>/dev/null || echo "${PGY_SCRIPT_VERSION:-0.0.1}")"
 
     local remote_ver=""
-    remote_ver=$(curl -s --max-time 4 "${REPO_URL}/version.txt" 2>/dev/null | tr -d ' \r\n\t')
+    remote_ver=$(curl -fsSL --retry 2 --max-time 5 "${REPO_URL}/version.txt?t=${now}" 2>/dev/null | tr -d ' \r\n\t')
+    if [[ -z "$remote_ver" ]]; then
+        remote_ver=$(curl -fsSL --retry 2 --max-time 5 "https://raw.githubusercontent.com/mycode212/new-script-ssh/main/version.txt?t=${now}" 2>/dev/null | tr -d ' \r\n\t')
+    fi
     if [[ -n "$remote_ver" ]] && pgy_is_newer_version "$remote_ver" "$local_ver"; then
         PGY_UPDATE_AVAILABLE=true
         PGY_LATEST_VERSION="$remote_ver"
@@ -76,45 +79,58 @@ update_script() {
 
     local repo_url="${GIT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
     local src_dir="${work_dir}/repo"
-    mkdir -p "${src_dir}"
+    rm -rf "${src_dir}"
 
+    local download_ok=false
     if command -v git >/dev/null 2>&1 && git clone --depth=1 -b main "${repo_url}" "${src_dir}" >/dev/null 2>&1; then
+        download_ok=true
         echo -e "  Repository berhasil diunduh via Git."
-    else
-        echo -e "  Mengunduh arsip paket rilis..."
-        curl -Ls "https://github.com/mycode212/new-script-ssh/archive/refs/heads/main.tar.gz" | tar -xz -C "${src_dir}" --strip-components=1 2>/dev/null || {
-            pgy_message danger "Gagal mengunduh pembaruan dari repository: ${repo_url}"
-            return 1
-        }
     fi
 
-    if [[ ! -d "${src_dir}/opt/pgy-lib" && ! -f "${src_dir}/menu.sh" ]]; then
-        pgy_message danger "Struktur berkas pembaruan tidak lengkap."
+    if [[ "$download_ok" == false ]]; then
+        echo -e "  Mengunduh arsip paket rilis..."
+        mkdir -p "${src_dir}"
+        if curl -fsSL --retry 3 --max-time 30 "https://github.com/mycode212/new-script-ssh/archive/refs/heads/main.tar.gz?t=$(date +%s)" | tar -xz -C "${src_dir}" --strip-components=1 2>/dev/null; then
+            download_ok=true
+        fi
+    fi
+
+    if [[ "$download_ok" == false || ! -d "${src_dir}/opt/pgy-lib" || ! -f "${src_dir}/menu.sh" ]]; then
+        pgy_message danger "Gagal mengunduh atau struktur berkas pembaruan tidak lengkap."
         return 1
     fi
 
     echo -e "  Sinkronisasi modul /pgy-lib/opt dan binary sistem..."
-    mkdir -p /pgy-lib/opt "${PGY_LIB_DIR}"
+    mkdir -p /pgy-lib/opt "${PGY_LIB_DIR}" "${DB_DIR}"
 
     # Perform atomic sync of modules to /pgy-lib/opt and /usr/local/lib/pgy-ssh-tunnel
     if [[ -d "${src_dir}/opt/pgy-lib" ]]; then
         cp -a "${src_dir}/opt/pgy-lib/." /pgy-lib/opt/ 2>/dev/null || true
         cp -a "${src_dir}/opt/pgy-lib/." "${PGY_LIB_DIR}/" 2>/dev/null || true
+        if [[ -n "${PGY_SOURCE_DIR:-}" && -d "${PGY_SOURCE_DIR}/opt/pgy-lib" ]]; then
+            cp -a "${src_dir}/opt/pgy-lib/." "${PGY_SOURCE_DIR}/opt/pgy-lib/" 2>/dev/null || true
+        fi
         chmod -R 755 /pgy-lib/opt "${PGY_LIB_DIR}" 2>/dev/null || true
     fi
 
     # Sync version.txt
     if [[ -f "${src_dir}/version.txt" ]]; then
-        install -m 644 "${src_dir}/version.txt" /pgy-lib/opt/version.txt
-        install -m 644 "${src_dir}/version.txt" "${PGY_LIB_DIR}/version.txt"
-        install -m 644 "${src_dir}/version.txt" "${DB_DIR}/version.txt"
+        install -m 644 "${src_dir}/version.txt" /pgy-lib/opt/version.txt 2>/dev/null || true
+        install -m 644 "${src_dir}/version.txt" "${PGY_LIB_DIR}/version.txt" 2>/dev/null || true
+        install -m 644 "${src_dir}/version.txt" "${DB_DIR}/version.txt" 2>/dev/null || true
+        if [[ -n "${PGY_SOURCE_DIR:-}" && -d "${PGY_SOURCE_DIR}" ]]; then
+            install -m 644 "${src_dir}/version.txt" "${PGY_SOURCE_DIR}/version.txt" 2>/dev/null || true
+        fi
     fi
 
-    # Copy Python helper scripts
+    # Copy Python helper scripts and standalone modules
     for py_script in pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_openvpn_runtime.py pgy_ssh_auth_session.py pgy_ws_ssh_bridge.py openvpn_module.sh; do
         if [[ -f "${src_dir}/${py_script}" ]]; then
             cp -a "${src_dir}/${py_script}" "${PGY_LIB_DIR}/${py_script}" 2>/dev/null || true
             cp -a "${src_dir}/${py_script}" "/pgy-lib/opt/${py_script}" 2>/dev/null || true
+            if [[ -n "${PGY_SOURCE_DIR:-}" && -d "${PGY_SOURCE_DIR}" ]]; then
+                cp -a "${src_dir}/${py_script}" "${PGY_SOURCE_DIR}/${py_script}" 2>/dev/null || true
+            fi
             chmod 755 "${PGY_LIB_DIR}/${py_script}" "/pgy-lib/opt/${py_script}" 2>/dev/null || true
         fi
     done
@@ -123,6 +139,16 @@ update_script() {
     if [[ -f "${src_dir}/menu.sh" ]]; then
         install -m 755 "${src_dir}/menu.sh" /usr/local/bin/menu
         install -m 755 "${src_dir}/menu.sh" /usr/local/bin/pgy
+        if [[ -n "${PGY_SOURCE_DIR:-}" && -d "${PGY_SOURCE_DIR}" ]]; then
+            install -m 755 "${src_dir}/menu.sh" "${PGY_SOURCE_DIR}/menu.sh" 2>/dev/null || true
+        fi
+    fi
+
+    if [[ -f "${src_dir}/install.sh" ]]; then
+        install -m 755 "${src_dir}/install.sh" /usr/local/bin/pgy-install 2>/dev/null || true
+        if [[ -n "${PGY_SOURCE_DIR:-}" && -d "${PGY_SOURCE_DIR}" ]]; then
+            install -m 755 "${src_dir}/install.sh" "${PGY_SOURCE_DIR}/install.sh" 2>/dev/null || true
+        fi
     fi
 
     if [[ -f "${src_dir}/opt/pgy-lib/bin/pgy-license-check" ]]; then
@@ -137,12 +163,28 @@ EOF
     chmod 755 /usr/local/bin/pgy-update
 
     # Restart core tunnel services if running to apply changes
+    systemctl is-active --quiet pgytunnel-limiter 2>/dev/null && systemctl restart pgytunnel-limiter >/dev/null 2>&1 || true
     systemctl is-active --quiet pgy-ws-ssh-bridge 2>/dev/null && systemctl restart pgy-ws-ssh-bridge >/dev/null 2>&1 || true
     systemctl is-active --quiet haproxy 2>/dev/null && systemctl restart haproxy >/dev/null 2>&1 || true
     systemctl is-active --quiet nginx 2>/dev/null && systemctl restart nginx >/dev/null 2>&1 || true
 
+    # Refresh dynamic banners if enabled
+    if declare -F refresh_dynamic_banner_routing_if_enabled >/dev/null 2>&1; then
+        refresh_dynamic_banner_routing_if_enabled >/dev/null 2>&1 || true
+    fi
+
+    local new_ver
+    new_ver="$(get_pgy_installed_version 2>/dev/null || echo "0.0.9")"
+
     echo
-    pgy_message ok "Pembaruan script Auto Script SSH ProgoCloud berhasil diselesaikan!"
-    echo -e "  Versi aktif: ${C_CYAN}$(get_pgy_installed_version)${C_RESET}"
+    pgy_box_top "$C_GREEN"
+    pgy_box_header "UPDATE BERHASIL" "$C_GREEN" "$C_GREEN"
+    pgy_box_divider "$C_GREEN"
+    pgy_row "Seluruh modul dan berkas script berhasil diperbarui!" "$C_GREEN"
+    pgy_row "$(printf "${C_GRAY}Versi Aktif:${C_RESET} ${C_WHITE}${C_BOLD}%s${C_RESET}" "${new_ver}")" "$C_GREEN"
+    pgy_box_bot "$C_GREEN"
     echo
+    echo -e "  ${C_YELLOW}Memuat ulang menu console...${C_RESET}"
+    sleep 1.5
+    exec /usr/local/bin/menu
 }
