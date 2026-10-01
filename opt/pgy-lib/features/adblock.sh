@@ -11,26 +11,29 @@ ADBLOCK_CUSTOM_BLACK="${ADBLOCK_DIR}/custom_blacklist.txt"
 ADBLOCK_CUSTOM_WHITE="${ADBLOCK_DIR}/custom_whitelist.txt"
 ADBLOCK_PORT=5353
 
+_pgy_adblock_apt_install() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y >/dev/null 2>&1 || true
+    apt-get install -y --no-install-recommends dnsmasq >/dev/null 2>&1 || true
+}
+
 pgy_adblock_install_prereq() {
     if ! command -v dnsmasq >/dev/null 2>&1; then
-        echo -e "${C_INFO}  Menginstal paket dnsmasq...${C_RESET}"
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update -y >/dev/null 2>&1 || true
-        apt-get install -y --no-install-recommends dnsmasq >/dev/null 2>&1 || true
+        if declare -F run_step_with_spinner >/dev/null 2>&1; then
+            run_step_with_spinner "Menginstal paket dnsmasq" _pgy_adblock_apt_install
+        else
+            echo -e "${C_INFO}  Menginstal paket dnsmasq...${C_RESET}"
+            _pgy_adblock_apt_install
+        fi
     fi
     mkdir -p "$ADBLOCK_DIR" "$ADBLOCK_CONF_DIR"
     touch "$ADBLOCK_CUSTOM_BLACK" "$ADBLOCK_CUSTOM_WHITE"
 }
 
-pgy_adblock_update_rules() {
-    pgy_adblock_install_prereq
-    echo -e "${C_INFO}  Mengunduh database domain iklan & tracker terbaru...${C_RESET}"
+_pgy_adblock_download_and_compile() {
     local tmp_rules="/tmp/pgy-adblock-rules.$$"
-
-    # Download raw list from OISD / StevenBlack
     local source_url="https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
     curl -fsSL --connect-timeout 10 --max-time 60 "$source_url" -o "$tmp_rules" 2>/dev/null || {
-        echo -e "${C_WARN}  Gagal mengunduh rules utama, menggunakan daftar fallback...${C_RESET}"
         cat <<EOF > "$tmp_rules"
 0.0.0.0 doubleclick.net
 0.0.0.0 googleads.g.doubleclick.net
@@ -40,7 +43,6 @@ pgy_adblock_update_rules() {
 EOF
     }
 
-    echo -e "${C_INFO}  Menyusun konfigurasi DNS sinkhole...${C_RESET}"
     cat <<EOF > "$ADBLOCK_CONF"
 # ProgoCloud Server-Side Adblock DNS Resolver
 port=${ADBLOCK_PORT}
@@ -53,28 +55,35 @@ log-async
 
 EOF
 
-    # Convert hosts format to dnsmasq address=/domain/0.0.0.0
     grep -E '^0\.0\.0\.0 ' "$tmp_rules" | awk '{print "address=/"$2"/0.0.0.0"}' >> "$ADBLOCK_CONF" 2>/dev/null || true
     rm -f "$tmp_rules"
 
-    # Add custom blacklist
     if [[ -s "$ADBLOCK_CUSTOM_BLACK" ]]; then
         while IFS= read -r domain; do
             [[ -n "$domain" && ! "$domain" =~ ^# ]] && echo "address=/${domain}/0.0.0.0" >> "$ADBLOCK_CONF"
         done < "$ADBLOCK_CUSTOM_BLACK"
     fi
 
-    # Exclude whitelist if any
     if [[ -s "$ADBLOCK_CUSTOM_WHITE" ]]; then
         while IFS= read -r domain; do
             [[ -n "$domain" && ! "$domain" =~ ^# ]] && sed -i "\|address=/${domain}/0.0.0.0|d" "$ADBLOCK_CONF" 2>/dev/null || true
         done < "$ADBLOCK_CUSTOM_WHITE"
     fi
+}
 
-    echo -e "${C_GREEN}  Database Adblocker berhasil diperbarui.${C_RESET}"
+pgy_adblock_update_rules() {
+    pgy_adblock_install_prereq
+    if declare -F run_step_with_spinner >/dev/null 2>&1; then
+        run_step_with_spinner "Mengunduh & menyusun database Adblocker" _pgy_adblock_download_and_compile
+    else
+        echo -e "${C_INFO}  Mengunduh database domain iklan & tracker terbaru...${C_RESET}"
+        _pgy_adblock_download_and_compile
+    fi
+
     if pgy_adblock_is_active; then
         systemctl restart dnsmasq >/dev/null 2>&1 || true
     fi
+    echo -e "${C_GREEN}  Database Adblocker berhasil diperbarui.${C_RESET}"
 }
 
 pgy_adblock_is_active() {
@@ -113,11 +122,25 @@ pgy_adblock_add_blacklist() {
     pgy_adblock_update_rules
 }
 
+pgy_adblock_del_blacklist() {
+    local domain="$1"
+    [[ -z "$domain" || ! -f "$ADBLOCK_CUSTOM_BLACK" ]] && return 1
+    sed -i "\|^${domain}$|d" "$ADBLOCK_CUSTOM_BLACK" 2>/dev/null || true
+    pgy_adblock_update_rules
+}
+
 pgy_adblock_add_whitelist() {
     local domain="$1"
     [[ -z "$domain" ]] && return 1
     mkdir -p "$ADBLOCK_DIR"
     echo "$domain" >> "$ADBLOCK_CUSTOM_WHITE"
     sort -u -o "$ADBLOCK_CUSTOM_WHITE" "$ADBLOCK_CUSTOM_WHITE"
+    pgy_adblock_update_rules
+}
+
+pgy_adblock_del_whitelist() {
+    local domain="$1"
+    [[ -z "$domain" || ! -f "$ADBLOCK_CUSTOM_WHITE" ]] && return 1
+    sed -i "\|^${domain}$|d" "$ADBLOCK_CUSTOM_WHITE" 2>/dev/null || true
     pgy_adblock_update_rules
 }

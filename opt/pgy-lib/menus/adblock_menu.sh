@@ -22,12 +22,13 @@ adblock_management_menu() {
         pgy_menu1 "[ 2]" "Perbarui Database Iklan (Download Rules)"
         pgy_menu1 "[ 3]" "Tambah Domain ke Custom Blacklist (Blokir Manual)"
         pgy_menu1 "[ 4]" "Tambah Domain ke Custom Whitelist (Izinkan)"
-        pgy_menu1 "[ 5]" "Lihat Daftar Blacklist & Whitelist Custom"
+        pgy_menu1 "[ 5]" "Hapus Domain dari Custom Blacklist / Whitelist"
+        pgy_menu1 "[ 6]" "Lihat Daftar Blacklist & Whitelist Custom"
         pgy_box_divider
         pgy_menu1 "[ 0]" "Kembali ke Menu Protokol"
         pgy_box_bot
         echo
-        if ! read -r -p "$(echo -e "${C_PROMPT}  Pilih opsi [0-5]: ${C_RESET}")" choice; then
+        if ! read -r -p "$(echo -e "${C_PROMPT}  Pilih opsi [0-6]: ${C_RESET}")" choice; then
             echo
             return
         fi
@@ -58,6 +59,35 @@ adblock_management_menu() {
                 fi
                 ;;
             5)
+                echo
+                echo -e "${C_TITLE}  --- HAPUS DOMAIN CUSTOM ---${C_RESET}"
+                echo "  [1] Hapus dari Blacklist"
+                echo "  [2] Hapus dari Whitelist"
+                echo "  [0] Batal"
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Pilih [0-2]: ${C_RESET}")" del_type
+                case "$del_type" in
+                    1)
+                        read -r -p "$(echo -e "${C_PROMPT}  Masukkan domain blacklist yang ingin dihapus: ${C_RESET}")" d_dom
+                        if [[ -n "$d_dom" ]]; then
+                            pgy_adblock_del_blacklist "$d_dom"
+                            echo -e "${C_GREEN}  Domain ${d_dom} dihapus dari Blacklist.${C_RESET}"
+                            sleep 1.5
+                        fi
+                        ;;
+                    2)
+                        read -r -p "$(echo -e "${C_PROMPT}  Masukkan domain whitelist yang ingin dihapus: ${C_RESET}")" d_dom
+                        if [[ -n "$d_dom" ]]; then
+                            pgy_adblock_del_whitelist "$d_dom"
+                            echo -e "${C_GREEN}  Domain ${d_dom} dihapus dari Whitelist.${C_RESET}"
+                            sleep 1.5
+                        fi
+                        ;;
+                    *)
+                        ;;
+                esac
+                ;;
+            6)
                 echo
                 pgy_box_top
                 pgy_box_header "CUSTOM BLACKLIST & WHITELIST"

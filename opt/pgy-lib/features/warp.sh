@@ -20,19 +20,15 @@ pgy_warp_arch() {
     esac
 }
 
-pgy_warp_install_binaries() {
+_pgy_warp_download_binaries() {
     local arch
     arch=$(pgy_warp_arch)
     mkdir -p /tmp/pgy-warp-install /usr/local/bin "$WARP_DIR"
 
     # 1. Install wireproxy if not present
     if ! command -v wireproxy >/dev/null 2>&1; then
-        echo -e "${C_INFO}  Mengunduh binary wireproxy (${arch})...${C_RESET}"
         local wp_url="https://github.com/windtf/wireproxy/releases/download/v1.1.2/wireproxy_linux_${arch}.tar.gz"
-        curl -fsSL --connect-timeout 10 --max-time 60 "$wp_url" -o /tmp/pgy-warp-install/wireproxy.tar.gz 2>/dev/null || {
-            echo -e "${C_ERR}  Gagal mengunduh wireproxy.${C_RESET}"
-            return 1
-        }
+        curl -fsSL --connect-timeout 10 --max-time 60 "$wp_url" -o /tmp/pgy-warp-install/wireproxy.tar.gz 2>/dev/null || return 1
         tar -xzf /tmp/pgy-warp-install/wireproxy.tar.gz -C /tmp/pgy-warp-install/
         local bin_wp
         bin_wp=$(find /tmp/pgy-warp-install -type f -name wireproxy -print -quit)
@@ -43,19 +39,26 @@ pgy_warp_install_binaries() {
 
     # 2. Install wgcf if not present
     if ! command -v wgcf >/dev/null 2>&1; then
-        echo -e "${C_INFO}  Mengunduh binary wgcf (${arch})...${C_RESET}"
         local wgcf_arch="amd64"
         [[ "$arch" == "arm64" ]] && wgcf_arch="arm64"
         local wgcf_url="https://github.com/ViRb3/wgcf/releases/download/v2.2.23/wgcf_2.2.23_linux_${wgcf_arch}"
-        curl -fsSL --connect-timeout 10 --max-time 60 "$wgcf_url" -o /usr/local/bin/wgcf 2>/dev/null || {
-            echo -e "${C_ERR}  Gagal mengunduh wgcf.${C_RESET}"
-            return 1
-        }
+        curl -fsSL --connect-timeout 10 --max-time 60 "$wgcf_url" -o /usr/local/bin/wgcf 2>/dev/null || return 1
         chmod 755 /usr/local/bin/wgcf
     fi
 
     rm -rf /tmp/pgy-warp-install
     return 0
+}
+
+pgy_warp_install_binaries() {
+    if ! command -v wireproxy >/dev/null 2>&1 || ! command -v wgcf >/dev/null 2>&1; then
+        if declare -F run_step_with_spinner >/dev/null 2>&1; then
+            run_step_with_spinner "Mengunduh binary Wireproxy & wgcf" _pgy_warp_download_binaries
+        else
+            echo -e "${C_INFO}  Mengunduh binary Wireproxy & wgcf...${C_RESET}"
+            _pgy_warp_download_binaries
+        fi
+    fi
 }
 
 pgy_warp_generate_config() {
