@@ -26,6 +26,7 @@ pgy_is_newer_version() {
 }
 
 press_enter() {
+    pgy_box_close_if_open 2>/dev/null || true
     if [[ "${PGY_ACTION_PAUSE_GUARD:-${TDZ_ACTION_PAUSE_GUARD:-}}" == "active" ]]; then
         [[ "${PGY_ACTION_PAUSED:-${TDZ_ACTION_PAUSED:-false}}" == "true" ]] && return
         PGY_ACTION_PAUSED=true

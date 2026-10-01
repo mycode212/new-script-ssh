@@ -173,48 +173,75 @@ pgy_kv_bar() {
 }
 tdz_kv_bar() { pgy_kv_bar "$@"; }
 
+PGY_CURRENT_BOX_OPEN=false
+
+pgy_box_close_if_open() {
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
+        pgy_box_bot "$C_CYAN"
+        PGY_CURRENT_BOX_OPEN=false
+    fi
+}
+tdz_box_close_if_open() { pgy_box_close_if_open "$@"; }
+
 pgy_screen_title() {
-    local title="$1" subtitle="${2:-}"
+    local title="$1" subtitle="${2:-}" color="${3:-$C_CYAN}"
+    pgy_box_close_if_open
     pgy_refresh_box_width
     [[ -t 1 ]] && clear
     echo
-    pgy_box_top
-    pgy_box_header "$title"
+    pgy_box_top "$color"
+    pgy_box_header "$title" "$color"
     if [[ -n "$subtitle" ]]; then
-        pgy_box_divider
-        pgy_row "$(printf "${C_GRAY}%s${C_RESET}" "$subtitle")"
+        pgy_box_divider "$color"
+        pgy_row "$(printf "${C_GRAY}%s${C_RESET}" "$subtitle")" "$color"
     fi
-    pgy_box_bot
-    echo
+    pgy_box_bot "$color"
+    PGY_CURRENT_BOX_OPEN=false
 }
 tdz_screen_title() { pgy_screen_title "$@"; }
 
 pgy_section() {
     local title="$1" color="${2:-$C_CYAN}"
-    local sep_len=$(( PGY_BOX_WIDTH - ${#title} - 5 ))
-    (( sep_len < 2 )) && sep_len=2
-    local sep=""
-    printf -v sep '─%.0s' $(seq 1 "$sep_len")
+    pgy_box_close_if_open
     echo
-    echo -e "  ${color}┌─${C_BOLD}${C_WHITE} ${title} ${C_RESET}${color}${sep}${C_RESET}"
+    pgy_box_top "$color"
+    pgy_box_header "$title" "$color"
+    pgy_box_divider "$color"
+    PGY_CURRENT_BOX_OPEN=true
 }
 tdz_section() { pgy_section "$@"; }
 
 pgy_detail() {
-    local label="$1" value="$2"
-    printf "  ${C_GRAY}│${C_RESET}  %-18s : ${C_WHITE}%s${C_RESET}\n" "$label" "$value"
+    local label="$1" value="$2" color="${3:-$C_CYAN}"
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" != "true" ]]; then
+        echo
+        pgy_box_top "$color"
+        PGY_CURRENT_BOX_OPEN=true
+    fi
+    local content
+    content=$(printf "${C_GRAY}%-20s :${C_RESET} ${C_WHITE}%s${C_RESET}" "$label" "$value")
+    pgy_row "$content" "$color"
 }
 tdz_detail() { pgy_detail "$@"; }
 
 pgy_message() {
-    local kind="$1" text="$2" color="$C_CYAN" tag="INFO"
+    local kind="$1" text="$2" color="${3:-$C_CYAN}" tag="INFO" tag_color="$C_CYAN"
     case "$kind" in
-        success|ok) color="$C_GREEN"; tag="OK" ;;
-        warn|warning) color="$C_YELLOW"; tag="WARN" ;;
-        danger|error|fail) color="$C_RED"; tag="ERROR" ;;
-        note) color="$C_CYAN"; tag="NOTE" ;;
+        success|ok) tag_color="$C_GREEN"; tag="OK" ;;
+        warn|warning) tag_color="$C_YELLOW"; tag="WARN" ;;
+        danger|error|fail) tag_color="$C_RED"; tag="ERROR" ;;
+        note) tag_color="$C_CYAN"; tag="NOTE" ;;
     esac
-    echo -e "  ${color}[${tag}]${C_RESET} ${text}"
+    local msg
+    msg=$(printf "${tag_color}[%s]${C_RESET} %s" "$tag" "$text")
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
+        pgy_row "$msg" "$color"
+    else
+        echo
+        pgy_box_top "$color"
+        pgy_row "$msg" "$color"
+        pgy_box_bot "$color"
+    fi
 }
 tdz_message() { pgy_message "$@"; }
 
@@ -244,20 +271,34 @@ pgy_progress_begin() {
     fi
     PGY_PROGRESS_LABEL="$display_text"
 
+    # If no box open, open one
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" != "true" ]]; then
+        echo
+        pgy_box_top "$C_CYAN"
+        pgy_box_header "PROGRESS" "$C_CYAN"
+        pgy_box_divider "$C_CYAN"
+        PGY_CURRENT_BOX_OPEN=true
+    fi
+
     if [[ -t 1 ]]; then
         printf '\033[?25l' 2>/dev/null || true
         (
             local index=0
             local -a spinners=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
             while true; do
-                printf '\r\033[2K  \033[38;2;0;212;255m%s\033[0m  %s...' "${spinners[$index]}" "${display_text}"
+                local pad_len=$(( PGY_BOX_WIDTH - ${#display_text} - 12 ))
+                (( pad_len < 0 )) && pad_len=0
+                local pad_sp=""
+                (( pad_len > 0 )) && printf -v pad_sp "%${pad_len}s" ""
+                printf '\r\033[2K  %s║%s  \033[38;2;0;212;255m%s\033[0m %s...%s %s║%s' \
+                    "$C_CYAN" "$C_RESET" "${spinners[$index]}" "${display_text}" "$pad_sp" "$C_CYAN" "$C_RESET"
                 index=$(((index + 1) % ${#spinners[@]}))
                 sleep 0.08
             done
         ) >&2 &
         PGY_PROGRESS_PID=$!
     else
-        echo -e "  [..] ${display_text}..."
+        pgy_row "  [..] ${display_text}..." "$C_CYAN"
     fi
 }
 tdz_progress_begin() { pgy_progress_begin "$@"; }
@@ -270,7 +311,7 @@ pgy_progress_done() {
         PGY_PROGRESS_PID=""
     fi
     printf '\r\033[2K\033[?25h' 2>/dev/null || true
-    echo -e "  ${C_GREEN}[✓]${C_RESET} ${text}"
+    pgy_row "$(printf "${C_GREEN}[✓]${C_RESET} %s" "$text")" "$C_CYAN"
 }
 tdz_progress_done() { pgy_progress_done "$@"; }
 
@@ -282,7 +323,7 @@ pgy_progress_failed() {
         PGY_PROGRESS_PID=""
     fi
     printf '\r\033[2K\033[?25h' 2>/dev/null || true
-    echo -e "  ${C_RED}[✗]${C_RESET} ${text}"
+    pgy_row "$(printf "${C_RED}[✗]${C_RESET} %s" "$text")" "$C_CYAN"
 }
 tdz_progress_failed() { pgy_progress_failed "$@"; }
 
@@ -294,10 +335,24 @@ pgy_progress_finish() {
         PGY_PROGRESS_PID=""
     fi
     printf '\r\033[2K\033[?25h' 2>/dev/null || true
-    if [[ "$success" == "true" ]]; then
-        echo -e "  ${C_GREEN}[OK]${C_RESET} ${message}"
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
+        pgy_box_divider "$C_CYAN"
+        if [[ "$success" == "true" ]]; then
+            pgy_row "$(printf "${C_GREEN}[OK]${C_RESET} %s" "$message")" "$C_CYAN"
+        else
+            pgy_row "$(printf "${C_RED}[FAIL]${C_RESET} %s" "$message")" "$C_CYAN"
+        fi
+        pgy_box_bot "$C_CYAN"
+        PGY_CURRENT_BOX_OPEN=false
     else
-        echo -e "  ${C_RED}[FAIL]${C_RESET} ${message}"
+        echo
+        pgy_box_top "$C_CYAN"
+        if [[ "$success" == "true" ]]; then
+            pgy_row "$(printf "${C_GREEN}[OK]${C_RESET} %s" "$message")" "$C_CYAN"
+        else
+            pgy_row "$(printf "${C_RED}[FAIL]${C_RESET} %s" "$message")" "$C_CYAN"
+        fi
+        pgy_box_bot "$C_CYAN"
     fi
 }
 tdz_progress_finish() { pgy_progress_finish "$@"; }
