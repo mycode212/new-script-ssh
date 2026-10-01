@@ -85,6 +85,13 @@ TDZ_RESOLV_CONF="${TDZ_RESOLV_CONF:-$PGY_RESOLV_CONF}"
 PGY_RESOLVED_STUB="${PGY_RESOLVED_STUB:-/run/systemd/resolve/stub-resolv.conf}"
 TDZ_RESOLVED_STUB="${TDZ_RESOLVED_STUB:-$PGY_RESOLVED_STUB}"
 
+ZIVPN_DIR="/etc/zivpn"
+ZIVPN_BIN="/usr/local/bin/zivpn"
+ZIVPN_SERVICE_FILE="/etc/systemd/system/zivpn.service"
+ZIVPN_CONFIG_FILE="$ZIVPN_DIR/config.json"
+ZIVPN_CERT_FILE="$ZIVPN_DIR/zivpn.crt"
+ZIVPN_KEY_FILE="$ZIVPN_DIR/zivpn.key"
+
 # Legacy paths
 LEGACY_UDP_DIR="${LEGACY_UDP_DIR:-/root/udp}"
 LEGACY_UDP_SERVICE="${LEGACY_UDP_SERVICE:-/etc/systemd/system/udp-custom.service}"

@@ -304,14 +304,17 @@ uninstall_script() {
     pgy_progress_run 5 6 "Removing application files" pgy_uninstall_application_files || uninstall_failed=true
     pgy_progress_run 6 6 "Verifying cleanup" pgy_verify_uninstall_cleanup || uninstall_failed=true
 
+    pgy_box_close_if_open
+
     if [[ "$uninstall_failed" == true ]]; then
+        echo
         pgy_message ERROR "Cleanup finished with one or more items requiring attention."
         echo -e "${C_DIM}Diagnostic details: ${PGY_UNINSTALL_LOG}${C_RESET}"
         exit 1
     fi
     rm -f "$PGY_UNINSTALL_LOG"
-    pgy_message OK "PGY SSH TUNNEL was removed successfully."
-    echo -e "  ${C_DIM}Managed services, files, and configuration were verified as removed.${C_RESET}"
+    echo
+    pgy_message OK "ProgoCloud Script SSH Premium was removed successfully."
     exit 0
 }
 

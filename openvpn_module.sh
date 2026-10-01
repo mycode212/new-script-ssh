@@ -1840,7 +1840,9 @@ pgy_openvpn_install() {
     fi
 
     if $failed; then
-        echo -e "${C_RED}[ERROR] OpenVPN setup could not be verified; restoring the previous state.${C_RESET}"
+        pgy_box_close_if_open
+        echo
+        pgy_message ERROR "OpenVPN setup could not be verified; restoring previous state."
         echo -e "${C_DIM}Diagnostic details: ${PGY_OVPN_DIAG_LOG}${C_RESET}"
         pgy_openvpn_stop_services
         if $repair && [[ -d "$backup/openvpn" ]]; then
@@ -1852,14 +1854,15 @@ pgy_openvpn_install() {
         return 1
     fi
     rm -rf "$backup"
-    echo -e "${C_GREEN}[OK] OpenVPN suite is active and verified.${C_RESET}"
+    pgy_box_close_if_open
     pgy_openvpn_show_details
 }
 
 pgy_openvpn_show_details() {
     local tls_label="Private OpenVPN certificate" shared_fingerprint="" gateway_fingerprint=""
     if ! pgy_openvpn_load_state; then
-        echo -e "${C_RED}[ERROR] OpenVPN is not installed.${C_RESET}"
+        echo
+        pgy_message ERROR "OpenVPN is not installed."
         return 1
     fi
     if [[ -r "${SSL_CERT_CHAIN_FILE:-}" && -r "$PGY_OVPN_PKI/gateway.crt" ]]; then
@@ -1872,15 +1875,15 @@ pgy_openvpn_show_details() {
     echo
     if declare -F pgy_section >/dev/null 2>&1; then
         pgy_section "OPENVPN CONNECTIONS"
-        pgy_detail "Server" "$PGY_OVPN_HOST"
-        pgy_detail "UDP / Official" "$PGY_OVPN_UDP_PORT"
-        pgy_detail "TCP / Official" "$PGY_OVPN_TCP_PORT"
-        pgy_detail "HTTP / WS" "$PGY_OVPN_HTTP_PORT"
-        pgy_detail "WSS / SNI" "$PGY_OVPN_WSS_PORT / $PGY_OVPN_HOST"
-        pgy_detail "SSL / SNI" "$PGY_OVPN_SSL_PORT / $PGY_OVPN_HOST"
-        pgy_detail "Outer TLS" "$tls_label"
-        pgy_detail "Download Portal" "https://${PGY_OVPN_HOST}:${PGY_OVPN_PORTAL_PORT}${PGY_OVPN_PUBLIC_PATH}/" "$C_CYAN"
-
+        pgy_detail "Server" "$PGY_OVPN_HOST" "$C_YELLOW"
+        pgy_detail "UDP / Official" "$PGY_OVPN_UDP_PORT" "$C_WHITE"
+        pgy_detail "TCP / Official" "$PGY_OVPN_TCP_PORT" "$C_WHITE"
+        pgy_detail "HTTP / WS" "$PGY_OVPN_HTTP_PORT" "$C_WHITE"
+        pgy_detail "WSS / SNI" "$PGY_OVPN_WSS_PORT / $PGY_OVPN_HOST" "$C_WHITE"
+        pgy_detail "SSL / SNI" "$PGY_OVPN_SSL_PORT / $PGY_OVPN_HOST" "$C_WHITE"
+        pgy_detail "Outer TLS" "$tls_label" "$C_CYAN"
+        pgy_detail "Download Portal" "https://${PGY_OVPN_HOST}:${PGY_OVPN_PORTAL_PORT}${PGY_OVPN_PUBLIC_PATH}/" "$C_GREEN"
+        pgy_box_bot
     else
         printf '  Server: %s\n  Portal: https://%s:%s%s/\n' \
             "$PGY_OVPN_HOST" "$PGY_OVPN_HOST" "$PGY_OVPN_PORTAL_PORT" "$PGY_OVPN_PUBLIC_PATH"
@@ -2287,11 +2290,12 @@ pgy_openvpn_uninstall() {
     else
         pgy_openvpn_progress_done
     fi
+    pgy_box_close_if_open
     if [[ "$cleanup_failed" == true ]]; then
-        [[ "$mode" == "silent" ]] || echo -e "${C_RED}[ERROR] OpenVPN cleanup requires attention.${C_RESET}"
+        [[ "$mode" == "silent" ]] || { echo; pgy_message ERROR "OpenVPN cleanup requires attention."; }
         return 1
     fi
-    [[ "$mode" == "silent" ]] || echo -e "${C_GREEN}[OK] OpenVPN suite removed. Existing SSH user accounts were preserved.${C_RESET}"
+    [[ "$mode" == "silent" ]] || { echo; pgy_message OK "OpenVPN suite removed. Existing SSH user accounts were preserved."; }
     return 0
 }
 
@@ -2369,8 +2373,28 @@ pgy_openvpn_menu() {
 
 pgy_openvpn_append_client_details() {
     pgy_openvpn_is_installed || return 0
-    pgy_openvpn_show_details
-    echo -e "  ${C_DIM}Use the same SSH username and password shown above.${C_RESET}"
+    local tls_label="Private OpenVPN certificate" shared_fingerprint="" gateway_fingerprint=""
+    pgy_openvpn_load_state || return 0
+    if [[ -r "${SSL_CERT_CHAIN_FILE:-}" && -r "$PGY_OVPN_PKI/gateway.crt" ]]; then
+        shared_fingerprint=$(openssl x509 -in "$SSL_CERT_CHAIN_FILE" -noout -fingerprint -sha256 2>/dev/null || true)
+        gateway_fingerprint=$(openssl x509 -in "$PGY_OVPN_PKI/gateway.crt" -noout -fingerprint -sha256 2>/dev/null || true)
+    fi
+    if [[ -n "$shared_fingerprint" && "$shared_fingerprint" == "$gateway_fingerprint" ]]; then
+        tls_label="Shared certificate from Domain & SSL"
+    fi
+    echo
+    pgy_section "OPENVPN CONNECTIONS"
+    pgy_detail "Server" "$PGY_OVPN_HOST" "$C_YELLOW"
+    pgy_detail "UDP / Official" "$PGY_OVPN_UDP_PORT" "$C_WHITE"
+    pgy_detail "TCP / Official" "$PGY_OVPN_TCP_PORT" "$C_WHITE"
+    pgy_detail "HTTP / WS" "$PGY_OVPN_HTTP_PORT" "$C_WHITE"
+    pgy_detail "WSS / SNI" "$PGY_OVPN_WSS_PORT / $PGY_OVPN_HOST" "$C_WHITE"
+    pgy_detail "SSL / SNI" "$PGY_OVPN_SSL_PORT / $PGY_OVPN_HOST" "$C_WHITE"
+    pgy_detail "Outer TLS" "$tls_label" "$C_CYAN"
+    pgy_detail "Download Portal" "https://${PGY_OVPN_HOST}:${PGY_OVPN_PORTAL_PORT}${PGY_OVPN_PUBLIC_PATH}/" "$C_GREEN"
+    pgy_box_divider "$C_CYAN"
+    pgy_row "${C_GRAY}Use the same SSH username and password shown above.${C_RESET}" "$C_CYAN"
+    pgy_box_bot "$C_CYAN"
 }
 
 pgy_openvpn_kill_user() {

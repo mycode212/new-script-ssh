@@ -5,8 +5,24 @@
 # ============================================================
 
 # Box Drawing Tokens
+PGY_CURRENT_BOX_OPEN=false
+PGY_CURRENT_BOX_COLOR="$C_CYAN"
+
+pgy_box_close_if_open() {
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
+        printf "  %s╚" "${PGY_CURRENT_BOX_COLOR:-$C_CYAN}"
+        printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
+        printf "╝%s\n" "$C_RESET"
+        PGY_CURRENT_BOX_OPEN=false
+    fi
+}
+tdz_box_close_if_open() { pgy_box_close_if_open "$@"; }
+
 pgy_box_top() {
     local color="${1:-$C_CYAN}"
+    pgy_box_close_if_open
+    PGY_CURRENT_BOX_COLOR="$color"
+    PGY_CURRENT_BOX_OPEN=true
     printf "  %s╔" "$color"
     printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
     printf "╗%s\n" "$C_RESET"
@@ -14,10 +30,13 @@ pgy_box_top() {
 tdz_box_top() { pgy_box_top "$@"; }
 
 pgy_box_bot() {
-    local color="${1:-$C_CYAN}"
-    printf "  %s╚" "$color"
-    printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
-    printf "╝%s\n" "$C_RESET"
+    local color="${1:-${PGY_CURRENT_BOX_COLOR:-$C_CYAN}}"
+    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
+        printf "  %s╚" "$color"
+        printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
+        printf "╝%s\n" "$C_RESET"
+        PGY_CURRENT_BOX_OPEN=false
+    fi
 }
 tdz_box_bot() { pgy_box_bot "$@"; }
 
@@ -198,16 +217,6 @@ pgy_kv_bar() {
     pgy_row2 "$left" "$right" "$color"
 }
 tdz_kv_bar() { pgy_kv_bar "$@"; }
-
-PGY_CURRENT_BOX_OPEN=false
-
-pgy_box_close_if_open() {
-    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
-        pgy_box_bot "$C_CYAN"
-        PGY_CURRENT_BOX_OPEN=false
-    fi
-}
-tdz_box_close_if_open() { pgy_box_close_if_open "$@"; }
 
 pgy_screen_title() {
     local title="$1" subtitle="${2:-}" color="${3:-$C_CYAN}"
@@ -466,4 +475,5 @@ show_banner() {
     printf "  %s╚" "$C_CYAN"
     printf '═%.0s' $(seq 1 "$PGY_BOX_WIDTH")
     printf "╝%s\n" "$C_RESET"
+    PGY_CURRENT_BOX_OPEN=false
 }

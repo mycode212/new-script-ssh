@@ -897,7 +897,8 @@ auto_backup_start() {
     clear; show_banner
     pgy_screen_title "START BACKUP BOT"
     if ! auto_backup_load_conf; then
-        echo -e "${C_RED}Bot not configured. Use 'Connect Bot' first.${C_RESET}"
+        echo
+        pgy_message ERROR "Bot not configured. Use 'Connect Bot' first."
         press_enter; return
     fi
     echo
@@ -926,7 +927,8 @@ auto_backup_stop() {
     pgy_screen_title "STOP BACKUP BOT"
     pm2 delete "$AUTO_BACKUP_PM2_NAME" >/dev/null 2>&1
     pm2 save >/dev/null 2>&1
-    echo -e "${C_YELLOW}Auto-backup bot stopped.${C_RESET}"
+    echo
+    pgy_message OK "Auto-backup bot stopped."
     press_enter
 }
 

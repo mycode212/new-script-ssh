@@ -1988,33 +1988,38 @@ generate_client_config() {
     clear; show_banner
     echo
     pgy_section "CLIENT CONNECTION CONFIGURATION"
-    echo -e "  ${C_DIM}Copy the required values for your client application.${C_RESET}"
+    pgy_row "${C_GRAY}Copy the required values for your client application.${C_RESET}"
+    pgy_box_bot
 
     echo
     pgy_section "ACCOUNT"
     pgy_detail "Username" "$user" "$C_YELLOW"
     pgy_detail "Password" "$pass" "$C_YELLOW"
-    pgy_detail "Host / IP" "$host_domain"
+    pgy_detail "Host / IP" "$host_domain" "$C_WHITE"
+    pgy_box_bot
 
     # 1. SSH Direct
     echo
     pgy_section "SSH DIRECT"
-    pgy_detail "Host" "$host_domain"
-    pgy_detail "Port" "22"
-    pgy_detail "Payload" "Standard SSH"
+    pgy_detail "Host" "$host_domain" "$C_WHITE"
+    pgy_detail "Port" "22" "$C_YELLOW"
+    pgy_detail "Payload" "Standard SSH" "$C_WHITE"
+    pgy_box_bot
 
     # 2. HAProxy edge stack
     if systemctl is-active --quiet haproxy; then
         echo
         pgy_section "HAPROXY EDGE STACK"
-        pgy_detail "Host" "$host_domain"
-        pgy_detail "HTTP / Raw SSH" "$EDGE_PUBLIC_HTTP_PORT"
-        pgy_detail "TLS / SNI / SSL" "$EDGE_PUBLIC_TLS_PORT"
-        pgy_detail "SNI / Bug Host" "$host_domain"
+        pgy_detail "Host" "$host_domain" "$C_WHITE"
+        pgy_detail "HTTP / Raw SSH" "$EDGE_PUBLIC_HTTP_PORT" "$C_YELLOW"
+        pgy_detail "TLS / SNI / SSL" "$EDGE_PUBLIC_TLS_PORT" "$C_YELLOW"
+        pgy_detail "SNI / Bug Host" "$host_domain" "$C_WHITE"
+        pgy_box_bot
     elif systemctl is-active --quiet nginx; then
         echo
         pgy_section "INTERNAL NGINX PROXY"
-        pgy_detail "Public Edge" "HAProxy ${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT}"
+        pgy_detail "Public Edge" "HAProxy ${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT}" "$C_YELLOW"
+        pgy_box_bot
     fi
 
     # 3. DNSTT
@@ -2023,18 +2028,22 @@ generate_client_config() {
             source "$DNSTT_CONFIG_FILE"
             echo
             pgy_section "DNSTT / SLOWDNS"
-            pgy_detail "Nameserver" "$TUNNEL_DOMAIN"
-            pgy_detail "Public Key" "$PUBLIC_KEY"
-            pgy_detail "DNS Resolver" "1.1.1.1 / 8.8.8.8"
+            pgy_detail "Nameserver" "$TUNNEL_DOMAIN" "$C_YELLOW"
+            if [[ -n "$PUBLIC_KEY" ]]; then
+                pgy_detail "Public Key" "$PUBLIC_KEY" "$C_CYAN"
+            fi
+            pgy_detail "DNS Resolver" "1.1.1.1 / 8.8.8.8" "$C_WHITE"
+            pgy_box_bot
         fi
     fi
 
     # 4. ZiVPN
     if systemctl is-active --quiet zivpn; then
         echo
-        pgy_section "ZIVPN"
-        pgy_detail "UDP Port" "5667"
-        pgy_detail "Forwarded Ports" "6000-19999"
+        pgy_section "ZIVPN (UDP)"
+        pgy_detail "UDP Port" "5667" "$C_YELLOW"
+        pgy_detail "Forwarded Ports" "6000-19999" "$C_YELLOW"
+        pgy_box_bot
     fi
 
     # 5. Optional OpenVPN suite — profiles use the same PGY credentials.

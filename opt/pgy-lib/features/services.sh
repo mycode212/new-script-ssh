@@ -126,10 +126,18 @@ EOF
     sleep 2
     if systemctl is-active --quiet badvpn; then
         pgy_progress_done
-        echo -e "\n${C_GREEN}[OK] badvpn (udpgw) is installed and active on port 7300.${C_RESET}"
+        pgy_box_close_if_open
+        echo
+        pgy_box_top "$C_GREEN"
+        pgy_box_header "STATUS SUMMARY" "$C_GREEN" "$C_GREEN"
+        pgy_box_divider "$C_GREEN"
+        pgy_detail "BadVPN (udpgw)" "Active / Running" "$C_GREEN"
+        pgy_detail "UDP Port" "7300" "$C_YELLOW"
+        pgy_box_bot "$C_GREEN"
     else
         pgy_progress_failed
-        echo -e "\n${C_RED}[ERROR] badvpn service failed to start.${C_RESET}"
+        pgy_box_close_if_open
+        pgy_message ERROR "BadVPN service failed to start."
     fi
 }
 
@@ -543,12 +551,20 @@ install_ssl_tunnel() {
     local server_name="${EDGE_DOMAIN:-$(detect_preferred_host)}"
     [[ -z "$server_name" ]] && server_name="_"
 
+    pgy_screen_title "INSTALL HAPROXY EDGE STACK" \
+        "Public ${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT} → Nginx ${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}"
+
     configure_edge_stack "$server_name" || return
 
-    echo -e "\n${C_GREEN}[OK] HAProxy edge stack is active.${C_RESET}"
-    echo -e "   • Public edge ports: ${C_YELLOW}${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT}${C_RESET}"
-    echo -e "   • Internal Nginx ports: ${C_YELLOW}${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}${C_RESET}"
-    echo -e "   • Shared certificate: ${C_YELLOW}${EDGE_CERT_MODE:-unknown}${C_RESET}"
+    echo
+    pgy_box_top "$C_GREEN"
+    pgy_box_header "STATUS SUMMARY" "$C_GREEN" "$C_GREEN"
+    pgy_box_divider "$C_GREEN"
+    pgy_detail "HAProxy Edge" "Active / Running" "$C_GREEN"
+    pgy_detail "Public Ports" "${EDGE_PUBLIC_HTTP_PORT}/${EDGE_PUBLIC_TLS_PORT}" "$C_YELLOW"
+    pgy_detail "Internal Ports" "${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}" "$C_YELLOW"
+    pgy_detail "Certificate" "${EDGE_CERT_MODE:-unknown}" "$C_CYAN"
+    pgy_box_bot "$C_GREEN"
 }
 
 uninstall_ssl_tunnel() {
@@ -658,8 +674,14 @@ install_zivpn() {
         return
     fi
 
-    echo -e "\n${C_YELLOW}ZiVPN Password Setup${C_RESET}"
-    read -r -p "  Enter passwords separated by commas (e.g., user1,user2) [Default: 'zi']: " input_config
+    echo
+    pgy_box_top "$C_CYAN"
+    pgy_box_header "ZIVPN PASSWORD SETUP" "$C_CYAN"
+    pgy_box_divider "$C_CYAN"
+    pgy_row "Enter passwords separated by commas (e.g., user1,user2)" "$C_CYAN"
+    pgy_box_bot "$C_CYAN"
+    echo
+    read -r -p "$(echo -e "${C_PROMPT}  Enter passwords [Default: 'zi']: ${C_RESET}")" input_config
     local json_passwords
     if [[ -n "$input_config" ]]; then
         local -a config_array
@@ -667,7 +689,8 @@ install_zivpn() {
         local configured_password
         for configured_password in "${config_array[@]}"; do
             if [[ -z "$configured_password" || ! "$configured_password" =~ ^[A-Za-z0-9._@+-]+$ ]]; then
-                echo -e "${C_RED}[ERROR] Passwords may contain only letters, numbers, dot, underscore, @, + and -.${C_RESET}"
+                echo
+                pgy_message ERROR "Passwords may contain only letters, numbers, dot, underscore, @, + and -."
                 return
             fi
         done
@@ -677,34 +700,38 @@ install_zivpn() {
         json_passwords='["zi"]'
     fi
 
+    mkdir -p "$ZIVPN_DIR" "$(dirname "$ZIVPN_BIN")"
+
     echo
     pgy_section "INSTALLATION PROGRESS"
     pgy_progress_begin 1 4 "Preparing service package"
-    if ! wget -q -O "$ZIVPN_BIN" "$zivpn_url"; then
+    if ! curl -fLsS "$zivpn_url" -o "$ZIVPN_BIN" 2>/dev/null && ! wget -q -O "$ZIVPN_BIN" "$zivpn_url" 2>/dev/null; then
         pgy_progress_failed
-        echo -e "${C_RED}[ERROR] The service package could not be prepared.${C_RESET}"
+        pgy_box_close_if_open
+        pgy_message ERROR "The service package could not be prepared."
         return
     fi
     chmod +x "$ZIVPN_BIN"
     pgy_progress_done
 
     pgy_progress_begin 2 4 "Configuring secure service"
-    mkdir -p "$ZIVPN_DIR"
     if ! command -v openssl &>/dev/null; then
         pgy_apt_install openssl >/dev/null 2>&1 || {
             pgy_progress_failed
-            echo -e "${C_RED}[ERROR] A required secure component could not be prepared.${C_RESET}"
+            pgy_box_close_if_open
+            pgy_message ERROR "A required secure component could not be prepared."
             return
         }
     fi
     
     openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 \
         -subj "/C=US/ST=California/L=Los Angeles/O=Example Corp/OU=IT Department/CN=zivpn" \
-        -keyout "$ZIVPN_KEY_FILE" -out "$ZIVPN_CERT_FILE" 2>/dev/null
+        -keyout "$ZIVPN_KEY_FILE" -out "$ZIVPN_CERT_FILE" >/dev/null 2>&1
 
     if [[ ! -s "$ZIVPN_CERT_FILE" || ! -s "$ZIVPN_KEY_FILE" ]]; then
         pgy_progress_failed
-        echo -e "${C_RED}[ERROR] Secure service configuration failed.${C_RESET}"
+        pgy_box_close_if_open
+        pgy_message ERROR "Secure service configuration failed."
         return
     fi
     chmod 600 "$ZIVPN_KEY_FILE"
@@ -750,7 +777,8 @@ EOF
 EOF
     if [[ ! -s "$ZIVPN_SERVICE_FILE" || ! -s "$ZIVPN_CONFIG_FILE" ]]; then
         pgy_progress_failed
-        echo -e "${C_RED}[ERROR] Service configuration could not be applied.${C_RESET}"
+        pgy_box_close_if_open
+        pgy_message ERROR "Service configuration could not be applied."
         return
     fi
     pgy_progress_done
@@ -775,17 +803,20 @@ EOF
 
     if systemctl is-active --quiet zivpn.service; then
         pgy_progress_done
-        pgy_message OK "ZiVPN installed and started successfully."
+        pgy_box_close_if_open
         echo
         pgy_section "ZIVPN CONNECTION DETAILS"
-        pgy_detail "Direct UDP Port" "5667"
-        pgy_detail "Forwarded Ports" "6000-19999"
+        pgy_detail "Direct UDP Port" "5667" "$C_YELLOW"
+        pgy_detail "Forwarded Ports" "6000-19999" "$C_YELLOW"
         if [[ "$forwarding_ready" != true ]]; then
-            echo -e "${C_YELLOW}[WARNING] The forwarded port range could not be applied; direct port 5667 remains available.${C_RESET}"
+            pgy_box_divider
+            pgy_row "${C_YELLOW}[WARNING] Port forwarding range could not be applied; direct port 5667 is active.${C_RESET}"
         fi
+        pgy_box_bot
     else
         pgy_progress_failed
-        echo -e "\n${C_RED}[ERROR] ZiVPN service failed to start.${C_RESET}"
+        pgy_box_close_if_open
+        pgy_message ERROR "ZiVPN service failed to start."
         pgy_capture_service_diagnostic zivpn.service
     fi
 }
@@ -928,12 +959,13 @@ purge_nginx() {
     else
         pgy_progress_failed
     fi
+    pgy_box_close_if_open
     if [[ "$purge_failed" == true ]]; then
         [[ "$mode" == "silent" ]] || pgy_message ERROR "Nginx package cleanup requires attention."
         return 1
     fi
     if [[ "$mode" != "silent" ]]; then
-        echo -e "\n${C_GREEN}[OK] Internal Nginx proxy purged. Shared certificates were kept.${C_RESET}"
+        pgy_message OK "Internal Nginx proxy purged. Shared certificates were kept."
     fi
     return 0
 }

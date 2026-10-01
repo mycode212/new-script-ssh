@@ -588,12 +588,16 @@ echo
 draw_live_progress 100 "Selesai" ""
 echo
 echo
+pgy_box_top "$C_GREEN"
 if [[ "$MODE" == "update" ]]; then
-    echo -e "  ${C_GREEN}${C_BOLD}✓ PEMBARUAN BERHASIL${C_RESET}"
-    echo -e "  ${C_GRAY}  Seluruh akun dan konfigurasi tersimpan aman.${C_RESET}"
+    pgy_box_header "PEMBARUAN BERHASIL" "$C_GREEN" "$C_GREEN"
+    pgy_box_divider "$C_GREEN"
+    pgy_row "Seluruh akun dan konfigurasi tersimpan aman." "$C_GREEN"
 else
-    echo -e "  ${C_GREEN}${C_BOLD}✓ INSTALASI BERHASIL${C_RESET}"
+    pgy_box_header "INSTALASI BERHASIL" "$C_GREEN" "$C_GREEN"
 fi
-echo -e "  ${C_CYAN}  Jalankan menu panel: ${C_BOLD}menu${C_RESET} atau ${C_BOLD}pgy${C_RESET}"
-echo -e "  ${C_CYAN}  Update script: ${C_BOLD}pgy-update${C_RESET}"
+pgy_box_divider "$C_GREEN"
+pgy_row "Jalankan menu panel : menu atau pgy" "$C_GREEN"
+pgy_row "Update script       : pgy-update" "$C_GREEN"
+pgy_box_bot "$C_GREEN"
 echo

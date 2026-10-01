@@ -88,23 +88,13 @@ refresh_dynamic_banner_routing_if_enabled() {
         systemctl start pgytunnel-limiter --no-block >/dev/null 2>&1 || true
     fi
 
-    # Publish the banner before enabling its post-auth PAM delivery. Otherwise
-    # an account's very first successful login could arrive before the worker
-    # has produced the file that the authenticated hook must render.
+    # Publish the banner before enabling its post-auth PAM delivery.
     mkdir -p "$banner_dir"
     if (( ${#users[@]} > 0 )); then
-        all_ready=false
-        for ((attempt=0; attempt<50; attempt++)); do
-            all_ready=true
-            for user in "${users[@]}"; do
-                [[ -n "$user" && -s "$banner_dir/${user}.txt" ]] || {
-                    all_ready=false
-                    break
-                }
-            done
-            $all_ready && break
-            sleep 0.1
+        for user in "${users[@]}"; do
+            [[ -n "$user" ]] && pgy_generate_user_banner "$user"
         done
+        all_ready=true
     fi
 
     # Always refresh routing even after a worker timeout so the account starts
@@ -173,34 +163,19 @@ update_ssh_banners_config() {
 
 
 _enable_banner_in_sshd_config() {
-    echo -e "\n${C_BLUE}Applying SSH banner settings...${C_RESET}"
     disable_dynamic_ssh_banner_system
-    sed -i.bak -E 's/^( *Banner *).*/#\1/' /etc/ssh/sshd_config
-    if ! grep -q -E "^Banner $SSH_BANNER_FILE" /etc/ssh/sshd_config; then
-        echo -e "\n# PGY SSH TUNNEL SSH Banner\nBanner $SSH_BANNER_FILE" >> /etc/ssh/sshd_config
+    sed -i.bak -E 's/^( *Banner *).*/#\1/' /etc/ssh/sshd_config 2>/dev/null
+    if ! grep -q -E "^Banner $SSH_BANNER_FILE" /etc/ssh/sshd_config 2>/dev/null; then
+        echo -e "\n# ProgoCloud SSH Banner\nBanner $SSH_BANNER_FILE" >> /etc/ssh/sshd_config
     fi
-    echo -e "${C_GREEN}[OK] SSH banner settings updated.${C_RESET}"
 }
 
 _restart_ssh() {
-    echo -e "\n${C_BLUE}Restarting SSH service to apply changes...${C_RESET}"
-    local ssh_service_name=""
-    if [ -f /lib/systemd/system/sshd.service ]; then
-        ssh_service_name="sshd.service"
-    elif [ -f /lib/systemd/system/ssh.service ]; then
+    local ssh_service_name="sshd.service"
+    if [ -f /lib/systemd/system/ssh.service ]; then
         ssh_service_name="ssh.service"
-    else
-        echo -e "${C_RED}[ERROR] Could not find sshd.service or ssh.service. Cannot restart SSH.${C_RESET}"
-        return 1
     fi
-
     systemctl restart "${ssh_service_name}" >/dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        echo -e "${C_GREEN}[OK] SSH service ('${ssh_service_name}') restarted successfully.${C_RESET}"
-    else
-        echo -e "${C_RED}[ERROR] Failed to restart SSH service ('${ssh_service_name}').${C_RESET}"
-        pgy_capture_service_diagnostic "$ssh_service_name"
-    fi
 }
 
 is_valid_telegram_username() {
@@ -240,125 +215,204 @@ edit_dynamic_banner_contacts() {
     clear; show_banner
     pgy_screen_title "DYNAMIC BANNER CONTACTS" "Update the Telegram usernames shown to SSH users."
     load_banner_identity_config
-    echo -e "${C_WHITE}Current Admin:${C_RESET}   ${C_GREEN}@${BANNER_ADMIN_USERNAME}${C_RESET}"
-    echo -e "${C_WHITE}Current Channel:${C_RESET} ${C_GREEN}@${BANNER_CHANNEL_USERNAME}${C_RESET}"
-    echo -e "${C_DIM}Enter Telegram usernames only. Links are generated automatically.${C_RESET}\n"
+    echo
+    pgy_box_top "$C_CYAN"
+    pgy_box_header "CURRENT CONTACTS" "$C_CYAN"
+    pgy_box_divider "$C_CYAN"
+    pgy_detail "Admin" "@${BANNER_ADMIN_USERNAME}" "$C_GREEN"
+    pgy_detail "Channel" "@${BANNER_CHANNEL_USERNAME}" "$C_GREEN"
+    pgy_box_divider "$C_CYAN"
+    pgy_row "${C_GRAY}Enter Telegram usernames only. Links are generated automatically.${C_RESET}" "$C_CYAN"
+    pgy_box_bot "$C_CYAN"
+    echo
 
     local new_admin new_channel
-    read -r -p "  Admin username [@${BANNER_ADMIN_USERNAME}]: " new_admin
-    read -r -p "  Channel username [@${BANNER_CHANNEL_USERNAME}]: " new_channel
+    read -r -p "$(echo -e "${C_PROMPT}  Admin username [@${BANNER_ADMIN_USERNAME}]: ${C_RESET}")" new_admin
+    read -r -p "$(echo -e "${C_PROMPT}  Channel username [@${BANNER_CHANNEL_USERNAME}]: ${C_RESET}")" new_channel
     new_admin=${new_admin#@}
     new_channel=${new_channel#@}
     new_admin=${new_admin:-$BANNER_ADMIN_USERNAME}
     new_channel=${new_channel:-$BANNER_CHANNEL_USERNAME}
 
     if ! is_valid_telegram_username "$new_admin"; then
-        echo -e "\n${C_RED}[ERROR] Invalid Admin username. Use 5-32 letters, numbers, or underscores, starting with a letter.${C_RESET}"
+        echo
+        pgy_message ERROR "Invalid Admin username. Use 5-32 letters, numbers, or underscores, starting with a letter."
         press_enter
         return
     fi
     if ! is_valid_telegram_username "$new_channel"; then
-        echo -e "\n${C_RED}[ERROR] Invalid Channel username. Use 5-32 letters, numbers, or underscores, starting with a letter.${C_RESET}"
+        echo
+        pgy_message ERROR "Invalid Channel username. Use 5-32 letters, numbers, or underscores, starting with a letter."
         press_enter
         return
     fi
 
     if ! save_banner_identity_config "$new_admin" "$new_channel"; then
-        echo -e "\n${C_RED}[ERROR] Could not save the banner contacts.${C_RESET}"
+        echo
+        pgy_message ERROR "Could not save the banner contacts."
         press_enter
         return
     fi
 
-    local limiter_reloaded=true
-    setup_limiter_service >/dev/null 2>&1 || limiter_reloaded=false
+    setup_limiter_service >/dev/null 2>&1 || true
     refresh_dynamic_banner_routing_if_enabled
-    echo -e "\n${C_GREEN}[OK] Dynamic banner contacts updated.${C_RESET}"
-    echo -e "   • Admin: ${C_YELLOW}@${new_admin}${C_RESET}"
-    echo -e "   • Channel: ${C_YELLOW}@${new_channel}${C_RESET}"
-    if [[ "$limiter_reloaded" != true ]]; then
-        echo -e "${C_YELLOW}[WARNING] Contacts were saved, but the banner worker could not be restarted.${C_RESET}"
-    fi
+    echo
+    pgy_box_top "$C_GREEN"
+    pgy_box_header "CONTACTS UPDATED" "$C_GREEN" "$C_GREEN"
+    pgy_box_divider "$C_GREEN"
+    pgy_detail "Admin" "@${new_admin}" "$C_YELLOW"
+    pgy_detail "Channel" "@${new_channel}" "$C_YELLOW"
+    pgy_box_bot "$C_GREEN"
     press_enter
 }
 
 set_ssh_banner_paste() {
     clear; show_banner
-    pgy_screen_title "PASTE STATIC SSH BANNER" "Paste the banner, then press Ctrl+D on a new line to save."
-    echo -e "  Paste your custom banner below. Press ${C_YELLOW}[Ctrl+D]${C_RESET} when finished."
-    echo -e "${C_DIM}The current static banner (if any) will be overwritten.${C_RESET}"
-    pgy_section "BANNER INPUT"
+    pgy_screen_title "PASTE STATIC SSH BANNER" "Tempel isi banner lalu tekan [Ctrl+D] untuk menyimpan."
+    echo
+    pgy_box_top "$C_CYAN"
+    pgy_box_header "PETUNJUK PENGISIAN" "$C_CYAN"
+    pgy_box_divider "$C_CYAN"
+    pgy_row "Tempel atau ketik custom banner Anda di bawah ini." "$C_CYAN"
+    pgy_row "Tekan tombol [Ctrl+D] pada baris baru setelah selesai." "$C_CYAN"
+    pgy_row "Banner statis sebelumnya akan ditimpa." "$C_CYAN"
+    pgy_box_bot "$C_CYAN"
+    echo
     cat > "$SSH_BANNER_FILE"
     chmod 644 "$SSH_BANNER_FILE"
-    echo -e "\n${C_GREEN}[OK] Static banner content saved.${C_RESET}"
     _enable_banner_in_sshd_config
     _restart_ssh
-    echo -e "\nPress ${C_YELLOW}[Enter]${C_RESET} to return..." && read -r
+    echo
+    pgy_box_top "$C_GREEN"
+    pgy_box_header "STATIC BANNER TERSIMPAN" "$C_GREEN" "$C_GREEN"
+    pgy_box_divider "$C_GREEN"
+    pgy_row "Banner SSH statis berhasil disimpan dan diterapkan ke SSH." "$C_GREEN"
+    pgy_box_bot "$C_GREEN"
+    press_enter
+}
+
+pgy_generate_user_banner() {
+    local target_user="$1"
+    local banner_dir="/etc/pgytunnel/banners"
+    mkdir -p "$banner_dir"
+    load_banner_identity_config
+
+    local user pass exp max_l quota trial_m trial_e _rest
+    if [[ -f "$DB_FILE" ]]; then
+        while IFS=: read -r user pass exp max_l quota trial_m trial_e _rest; do
+            [[ -n "$user" && "$user" != \#* ]] || continue
+            if [[ -n "$target_user" && "$user" != "$target_user" ]]; then
+                continue
+            fi
+            
+            local max_display="${max_l:-1}"
+            local exp_display="${exp:-Never}"
+            local quota_display="Unlimited"
+            if [[ "$quota" =~ ^[0-9]+$ && "$quota" -gt 0 ]]; then
+                quota_display="${quota} GB"
+            fi
+            if [[ "$trial_m" == "trial" && -n "$trial_e" && "$trial_e" -gt 0 ]]; then
+                exp_display=$(date -d "@$trial_e" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$exp")
+            fi
+
+            local banner_content
+            banner_content=$(cat <<EOF
+<br><br>---------------------------------<br>
+<b>[!] ACCOUNT • DETAILS [!]</b><br>
+---------------------------------<br>
+<b>[-] Username:</b> ${user}<br>
+<b>[-] Status:</b> Active<br>
+<b>[-] Active Session:</b> 0/${max_display}<br>
+<b>[-] Expiration:</b> ${exp_display}<br>
+<b>[-] Quota:</b> ${quota_display}<br>
+---------------------------------<br>
+<b>[-] Admin:</b> <a href="https://t.me/${BANNER_ADMIN_USERNAME}">@${BANNER_ADMIN_USERNAME}</a><br>
+<b>[-] Channel:</b> <a href="https://t.me/${BANNER_CHANNEL_USERNAME}">@${BANNER_CHANNEL_USERNAME}</a><br>
+---------------------------------
+EOF
+)
+            write_banner_if_changed "$user" "$banner_content"
+        done < "$DB_FILE"
+    fi
 }
 
 view_ssh_banner() {
     clear; show_banner
     pgy_screen_title "CURRENT STATIC SSH BANNER"
     if [ -f "$SSH_BANNER_FILE" ]; then
-        pgy_section "BEGIN BANNER"
-        cat "$SSH_BANNER_FILE"
-        pgy_section "END BANNER"
+        echo
+        pgy_section "BANNER CONTENT"
+        local bline
+        while IFS= read -r bline; do
+            pgy_row "$bline" "$C_CYAN"
+        done < "$SSH_BANNER_FILE"
+        pgy_box_bot
     else
-        echo -e "\n${C_YELLOW}[INFO] No static banner is configured.${C_RESET}"
+        echo
+        pgy_message INFO "No static banner is configured."
     fi
-    echo -e "\nPress ${C_YELLOW}[Enter]${C_RESET} to return..." && read -r
+    press_enter
 }
 
 remove_ssh_banner() {
     clear; show_banner
     pgy_screen_title "DISABLE SSH BANNERS" "Disable both dynamic and static SSH login banners." "$C_DANGER"
     read -p "  Are you sure you want to disable all SSH banners? (y/n): " confirm
-    if [[ "$confirm" != "y" ]]; then
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo
         pgy_message CANCELLED "Action cancelled."
-        echo -e "\nPress ${C_YELLOW}[Enter]${C_RESET} to return..." && read -r
+        press_enter
         return
     fi
     if [ -f "$SSH_BANNER_FILE" ]; then
         rm -f "$SSH_BANNER_FILE"
-        echo -e "\n${C_GREEN}[OK] Static banner removed.${C_RESET}"
-    else
-        echo -e "\n${C_YELLOW}[INFO] No static banner is configured.${C_RESET}"
     fi
     disable_dynamic_ssh_banner_system
-    echo -e "\n${C_BLUE}Disabling SSH banner settings...${C_RESET}"
     disable_static_ssh_banner_in_sshd_config
-    echo -e "${C_GREEN}[OK] SSH banner disabled.${C_RESET}"
-    _restart_ssh
-    echo -e "\nPress ${C_YELLOW}[Enter]${C_RESET} to return..." && read -r
+    _restart_ssh >/dev/null 2>&1 || true
+    echo
+    pgy_message OK "All SSH banners have been disabled."
+    press_enter
 }
 
 preview_dynamic_ssh_banner() {
     if ! is_dynamic_ssh_banner_enabled; then
-        echo -e "\n${C_RED}[ERROR] Dynamic banners are not enabled right now.${C_RESET}"
+        echo
+        pgy_message ERROR "Dynamic banners are not enabled right now."
         press_enter
         return
     fi
 
-    echo -e "${C_DIM}Refreshing dynamic banner worker...${C_RESET}"
-    setup_limiter_service >/dev/null 2>&1
     _select_user_interface "PREVIEW DYNAMIC BANNER"
     local u=$SELECTED_USER
     if [[ -z "$u" || "$u" == "NO_USERS" ]]; then
         return
     fi
 
+    pgy_generate_user_banner "$u"
+
     echo
     pgy_section "DYNAMIC BANNER PREVIEW — $u"
-    echo
     if [[ -f "/etc/pgytunnel/banners/${u}.txt" ]]; then
-        cat "/etc/pgytunnel/banners/${u}.txt"
+        local raw_content line
+        raw_content=$(cat "/etc/pgytunnel/banners/${u}.txt" 2>/dev/null | sed 's/<br>/\n/g; s/<[^>]*>//g')
+        while IFS= read -r line; do
+            line=$(echo "$line" | tr -d '\r')
+            [[ -z "$line" ]] && continue
+            if [[ "$line" =~ ^---+ ]]; then
+                pgy_box_divider
+            elif [[ "$line" =~ ^\[\!\] ]]; then
+                pgy_row "${C_BOLD}${C_CYAN}${line}${C_RESET}"
+            elif [[ "$line" =~ ^\[\-\]\ (.*):\ (.*)$ ]]; then
+                pgy_detail "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$C_WHITE"
+            else
+                pgy_row "${C_WHITE}${line}${C_RESET}"
+            fi
+        done <<< "$raw_content"
+        pgy_box_bot
     else
-        echo -e "${C_RED}Banner file not generated yet. Waiting up to 10s for the worker...${C_RESET}"
-        sleep 5
-        if ! cat "/etc/pgytunnel/banners/${u}.txt" 2>/dev/null; then
-            echo -e "\n${C_RED}Still not generated. Here are the last limiter logs:${C_RESET}"
-            pgy_section "LIMITER LOG"
-            journalctl -u pgytunnel-limiter -n 15 --no-pager
-        fi
+        pgy_row "${C_YELLOW}Banner file not generated yet for user: $u${C_RESET}"
+        pgy_box_bot
     fi
     press_enter
 }

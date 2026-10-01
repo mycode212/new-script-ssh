@@ -10,9 +10,11 @@ show_dnstt_details() {
         echo
         pgy_section "DNSTT CONNECTION DETAILS"
         pgy_detail "Tunnel Domain" "$TUNNEL_DOMAIN" "$C_YELLOW"
-        pgy_detail "Public Key" "$PUBLIC_KEY" "$C_YELLOW"
+        if [[ -n "$PUBLIC_KEY" ]]; then
+            pgy_detail "Public Key" "$PUBLIC_KEY" "$C_CYAN"
+        fi
         if [[ -n "$FORWARD_DESC" ]]; then
-            pgy_detail "Forwarding To" "$FORWARD_DESC"
+            pgy_detail "Forwarding To" "$FORWARD_DESC" "$C_WHITE"
         else
             pgy_detail "Forwarding To" "Unknown (config missing)" "$C_YELLOW"
         fi
@@ -24,14 +26,15 @@ show_dnstt_details() {
         fi
         
         if [[ "$FORWARD_DESC" == *"V2Ray"* ]]; then
-            pgy_detail "Action Required" "Run V2Ray (VLESS/VMess/Trojan) on port 8787 without TLS" "$C_YELLOW"
+            pgy_detail "Action Required" "Run V2Ray (port 8787) without TLS" "$C_YELLOW"
         elif [[ "$FORWARD_DESC" == *"SSH"* ]]; then
-            pgy_detail "Action Required" "Configure the SSH client to use this DNS tunnel" "$C_YELLOW"
+            pgy_detail "Action Required" "Configure SSH client to use this DNS tunnel" "$C_YELLOW"
         fi
-        
-        echo -e "\n${C_DIM}Use these details in your client configuration.${C_RESET}"
+        pgy_box_divider
+        pgy_row "${C_GRAY}Use these details in your client configuration.${C_RESET}"
+        pgy_box_bot
     else
-        echo -e "\n${C_YELLOW}[INFO] DNSTT configuration file not found. Details are unavailable.${C_RESET}"
+        pgy_message INFO "DNSTT configuration file not found. Details are unavailable."
     fi
 }
 
@@ -296,11 +299,12 @@ EOF
     sleep 2
     if systemctl is-active --quiet dnstt.service; then
         pgy_progress_done
-        echo -e "\n${C_GREEN}[OK] DNSTT has been installed and started!${C_RESET}"
+        pgy_box_close_if_open
         show_dnstt_details
     else
         pgy_progress_failed
-        echo -e "\n${C_RED}[ERROR] DNSTT service failed to start.${C_RESET}"
+        pgy_box_close_if_open
+        pgy_message ERROR "DNSTT service failed to start."
         pgy_capture_service_diagnostic dnstt.service
         rollback_dnstt_failed_install "$resolver_changed"
     fi
