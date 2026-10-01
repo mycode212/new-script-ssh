@@ -119,3 +119,67 @@ pgy_display_license_block_screen() {
     pgy_box_bot "$C_DANGER"
     echo
 }
+
+pgy_license_show_status() {
+    clear; show_banner
+    pgy_screen_title "STATUS LISENSI" "Informasi lisensi VPS ProgoCloud"
+
+    local license_bin
+    license_bin="$(pgy_license_guard_bin_path)"
+    local raw_out=""
+    if [[ -x "${license_bin}" ]]; then
+        raw_out="$("${license_bin}" status 2>&1)"
+    elif [[ -f "${PGY_LIB_DIR}/pgy-license-check" ]]; then
+        raw_out="$(python3 "${PGY_LIB_DIR}/pgy-license-check" status 2>&1)"
+    elif [[ -f "/pgy-lib/opt/bin/pgy-license-check" ]]; then
+        raw_out="$(python3 "/pgy-lib/opt/bin/pgy-license-check" status 2>&1)"
+    fi
+
+    local st_status="" st_reason="" st_ip="" st_until="" st_next=""
+    local line k v
+    while IFS= read -r line; do
+        line=$(echo "$line" | tr -d '\r')
+        [[ -z "$line" ]] && continue
+        if [[ "$line" =~ ^([A-Za-z0-9_]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            k="${BASH_REMATCH[1]}"
+            v="${BASH_REMATCH[2]}"
+            case "$k" in
+                Status) st_status="$v" ;;
+                Reason) st_reason="$v" ;;
+                IP)     st_ip="$v" ;;
+                Until)  st_until="$v" ;;
+                Next)   st_next="$v" ;;
+            esac
+        fi
+    done <<< "$raw_out"
+
+    local status_color="$C_GREEN"
+    local status_text="ALLOWED (AKTIF)"
+    if [[ "$st_status" != "allowed" && "$st_status" != "active" ]]; then
+        status_color="$C_RED"
+        status_text="${st_status^^}"
+        [[ -z "$status_text" ]] && status_text="TIDAK AKTIF / DITOLAK"
+    fi
+
+    echo
+    pgy_box_top "$C_CYAN"
+    pgy_box_header "DETAIL LISENSI VPS" "$C_CYAN"
+    pgy_box_divider "$C_CYAN"
+    pgy_detail "Status Lisensi" "${status_color}${status_text}${C_RESET}" "$C_CYAN"
+    [[ -n "$st_ip" ]] && pgy_detail "IP VPS" "$st_ip" "$C_CYAN"
+    [[ -n "$st_reason" ]] && pgy_detail "Keterangan" "$st_reason" "$C_CYAN"
+    if [[ -n "$st_until" && "$st_until" != "none" ]]; then
+        pgy_detail "Masa Aktif" "$st_until" "$C_CYAN"
+    else
+        pgy_detail "Masa Aktif" "Lifetime / Unlimited" "$C_CYAN"
+    fi
+    if [[ -n "$st_next" && "$st_next" != "none" ]]; then
+        pgy_detail "Cek Otomatis" "$st_next" "$C_CYAN"
+    fi
+    pgy_box_divider "$C_CYAN"
+    pgy_detail "Portal Lisensi" "${PGY_LICENSE_PORTAL_URL:-https://autoscript-license-3xj.pages.dev}" "$C_CYAN"
+    pgy_detail "Support CS" "https://t.me/progocloud" "$C_CYAN"
+    pgy_box_bot "$C_CYAN"
+    press_enter
+}
+

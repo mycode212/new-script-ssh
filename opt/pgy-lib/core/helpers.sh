@@ -12,16 +12,25 @@ die()  { echo -e "${RED:-$C_RED}[ERROR]${NC:-$C_RESET} $*" >&2; exit 1; }
 subtle() { echo -e "${YELLOW:-$C_YELLOW}$*${NC:-$C_RESET}"; }
 hr()   { echo "------------------------------------------------------------"; }
 
-# Check if remote version is strictly newer than local version
 pgy_is_newer_version() {
     local remote="$1" local_ver="$2"
     [[ -z "$remote" || -z "$local_ver" ]] && return 1
     [[ "$remote" == "$local_ver" ]] && return 1
     local newest
     newest=$(printf '%s\n%s\n' "$local_ver" "$remote" | sort -V 2>/dev/null | tail -n1)
-    if [[ "$newest" == "$remote" && "$remote" != "$local_ver" ]]; then
-        return 0
+    if [[ -n "$newest" ]]; then
+        [[ "$newest" == "$remote" && "$remote" != "$local_ver" ]] && return 0
+        return 1
     fi
+    local IFS=.
+    local -a r_parts=($remote) l_parts=($local_ver)
+    local i
+    for ((i=0; i<${#r_parts[@]} || i<${#l_parts[@]}; i++)); do
+        local r_val=${r_parts[i]:-0}
+        local l_val=${l_parts[i]:-0}
+        if (( 10#$r_val > 10#$l_val )); then return 0; fi
+        if (( 10#$r_val < 10#$l_val )); then return 1; fi
+    done
     return 1
 }
 

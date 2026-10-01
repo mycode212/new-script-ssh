@@ -77,7 +77,8 @@ if [[ "${1:-}" == "--update-setup" ]]; then
 fi
 
 if [[ "${1:-}" == "--update-script" || "${1:-}" == "update" ]]; then
-    update_script
+    shift
+    update_script "$@"
     exit 0
 fi
 

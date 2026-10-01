@@ -62,10 +62,64 @@ update_script() {
         return 1
     fi
 
+    # Parse arguments for force mode
+    local force_mode=false
+    local arg
+    for arg in "$@"; do
+        if [[ "$arg" == "--force" || "$arg" == "-f" ]]; then
+            force_mode=true
+        fi
+    done
+
     # Preflight license check before updating
     if ! pgy_license_guard_preflight "setup"; then
         pgy_display_license_block_screen
         return 1
+    fi
+
+    local local_ver
+    local_ver="$(get_pgy_installed_version 2>/dev/null || echo "${PGY_SCRIPT_VERSION:-0.0.1}")"
+
+    local now
+    now=$(date +%s)
+    local remote_ver=""
+    remote_ver=$(curl -fsSL --retry 2 --max-time 5 "${REPO_URL}/version.txt?t=${now}" 2>/dev/null | tr -d ' \r\n\t')
+    if [[ -z "$remote_ver" ]]; then
+        remote_ver=$(curl -fsSL --retry 2 --max-time 5 "https://raw.githubusercontent.com/mycode212/new-script-ssh/main/version.txt?t=${now}" 2>/dev/null | tr -d ' \r\n\t')
+    fi
+
+    # Check if update is needed
+    if [[ "$force_mode" == false ]]; then
+        if [[ -z "$remote_ver" ]]; then
+            echo
+            pgy_box_top "$C_YELLOW"
+            pgy_box_header "CEK PEMBARUAN SCRIPT" "$C_YELLOW"
+            pgy_box_divider "$C_YELLOW"
+            pgy_detail "Versi Saat Ini" "$local_ver" "$C_YELLOW"
+            pgy_detail "Status Server" "Koneksi ke repository gagal" "$C_YELLOW"
+            pgy_box_divider "$C_YELLOW"
+            pgy_row "Gagal memeriksa versi terbaru dari server repository." "$C_YELLOW"
+            pgy_row "Gunakan: pgy-update --force jika ingin update paksa." "$C_YELLOW"
+            pgy_box_bot "$C_YELLOW"
+            press_enter
+            return 0
+        fi
+
+        if ! pgy_is_newer_version "$remote_ver" "$local_ver"; then
+            echo
+            pgy_box_top "$C_GREEN"
+            pgy_box_header "SCRIPT SUDAH UP-TO-DATE" "$C_GREEN" "$C_GREEN"
+            pgy_box_divider "$C_GREEN"
+            pgy_detail "Versi Saat Ini" "$local_ver" "$C_GREEN"
+            pgy_detail "Versi Server" "$remote_ver" "$C_GREEN"
+            pgy_detail "Status" "Versi Terbaru (Up-to-Date)" "$C_GREEN"
+            pgy_box_divider "$C_GREEN"
+            pgy_row "Tidak ada pembaruan baru yang tersedia saat ini." "$C_GREEN"
+            pgy_row "Ketik pgy-update --force untuk update paksa / reinstall." "$C_GREEN"
+            pgy_box_bot "$C_GREEN"
+            press_enter
+            return 0
+        fi
     fi
 
     echo
@@ -73,7 +127,11 @@ update_script() {
     pgy_box_header "PROSES PEMBARUAN" "$C_CYAN"
     pgy_box_divider "$C_CYAN"
     pgy_row "[1/3] Memeriksa validasi lisensi VPS... [OK]" "$C_CYAN"
-    pgy_row "[2/3] Mengunduh paket pembaruan dari repository..." "$C_CYAN"
+    if [[ "$force_mode" == true ]]; then
+        pgy_row "[2/3] Mengunduh berkas script (Force Reinstall: ${local_ver})..." "$C_CYAN"
+    else
+        pgy_row "[2/3] Mengunduh pembaruan (${local_ver} -> ${remote_ver})..." "$C_CYAN"
+    fi
 
     local work_dir
     work_dir="$(mktemp -d /tmp/pgy-update.XXXXXX)"
@@ -183,7 +241,7 @@ EOF
     pgy_box_bot "$C_CYAN"
 
     local new_ver
-    new_ver="$(get_pgy_installed_version 2>/dev/null || echo "0.1.0")"
+    new_ver="$(get_pgy_installed_version 2>/dev/null || echo "${remote_ver:-0.1.1}")"
 
     echo
     pgy_box_top "$C_GREEN"

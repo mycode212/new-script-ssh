@@ -225,14 +225,3 @@ main_menu() {
         esac
     done
 }
-
-pgy_license_show_status() {
-    pgy_screen_title "STATUS LISENSI" "Informasi lisensi VPS ProgoCloud"
-    local license_bin
-    license_bin="$(pgy_license_guard_bin_path)"
-    if [[ -x "${license_bin}" ]]; then
-        "${license_bin}" status
-    else
-        python3 "${PGY_LIB_DIR}/pgy-license-check" status 2>/dev/null || python3 "/pgy-lib/opt/bin/pgy-license-check" status 2>/dev/null || echo "Informasi lisensi tidak tersedia."
-    fi
-}
