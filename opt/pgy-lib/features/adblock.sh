@@ -110,7 +110,7 @@ pgy_adblock_apply_firewall() {
     iptables -t nat -C PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
         iptables -t nat -A PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
 
-    # 2. Redirect outbound DNS queries from SSH tunnel users
+    # 2. Redirect outbound DNS queries from SSH tunnel users (Group & UID-based)
     for grp in pgyusers tdzusers; do
         if getent group "$grp" >/dev/null 2>&1; then
             iptables -t nat -C OUTPUT -p udp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
@@ -119,6 +119,21 @@ pgy_adblock_apply_firewall() {
                 iptables -t nat -A OUTPUT -p tcp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
         fi
     done
+
+    local db_path="${DB_FILE:-/etc/pgytunnel/users.db}"
+    if [[ -s "$db_path" ]]; then
+        while IFS=: read -r u_name _rest; do
+            [[ -z "$u_name" || "$u_name" =~ ^# ]] && continue
+            local u_uid
+            u_uid=$(id -u "$u_name" 2>/dev/null || true)
+            if [[ -n "$u_uid" && "$u_uid" =~ ^[0-9]+$ ]]; then
+                iptables -t nat -C OUTPUT -p udp --dport 53 -m owner --uid-owner "$u_uid" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
+                    iptables -t nat -A OUTPUT -p udp --dport 53 -m owner --uid-owner "$u_uid" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+                iptables -t nat -C OUTPUT -p tcp --dport 53 -m owner --uid-owner "$u_uid" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || \
+                    iptables -t nat -A OUTPUT -p tcp --dport 53 -m owner --uid-owner "$u_uid" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+            fi
+        done < "$db_path"
+    fi
 }
 
 pgy_adblock_remove_firewall() {
@@ -131,6 +146,19 @@ pgy_adblock_remove_firewall() {
             iptables -t nat -D OUTPUT -p tcp --dport 53 -m owner --gid-owner "$grp" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
         fi
     done
+
+    local db_path="${DB_FILE:-/etc/pgytunnel/users.db}"
+    if [[ -s "$db_path" ]]; then
+        while IFS=: read -r u_name _rest; do
+            [[ -z "$u_name" || "$u_name" =~ ^# ]] && continue
+            local u_uid
+            u_uid=$(id -u "$u_name" 2>/dev/null || true)
+            if [[ -n "$u_uid" && "$u_uid" =~ ^[0-9]+$ ]]; then
+                iptables -t nat -D OUTPUT -p udp --dport 53 -m owner --uid-owner "$u_uid" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+                iptables -t nat -D OUTPUT -p tcp --dport 53 -m owner --uid-owner "$u_uid" -j REDIRECT --to-ports ${ADBLOCK_PORT} 2>/dev/null || true
+            fi
+        done < "$db_path"
+    fi
 }
 
 pgy_adblock_toggle() {
