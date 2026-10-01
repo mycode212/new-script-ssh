@@ -495,19 +495,34 @@ trojan_link = f"trojan://{uuid_v}@{domain}:443?path=%2Ftrojan&security=tls&type=
 vless_grpc_link = f"vless://{uuid_v}@{domain}:443?mode=gun&security=tls&encryption=none&type=grpc&serviceName=vless-grpc&sni={domain}#ProgoCloud-VLess-gRPC-{user}"
 
 print("=" * 60)
-print(f"DETAIL AKUN XRAY MULTI-PROTOCOL: {user.upper()}")
+print(f"DETAIL AKUN XRAY {proto.upper()}: {user.upper()}")
 print(f"Domain / Host : {domain}")
+print(f"Port / TLS    : 443 (TLS Enabled)")
 print(f"UUID / Pass   : {uuid_v}")
 print(f"Expired Date  : {exp_date}")
 print("=" * 60)
-print("\n[ LINK VMESS WS TLS ]")
-print(vmess_link)
-print("\n[ LINK VLESS WS TLS ]")
-print(vless_link)
-print("\n[ LINK TROJAN WS TLS ]")
-print(trojan_link)
-print("\n[ LINK VLESS gRPC TLS ]")
-print(vless_grpc_link)
+
+if proto in ("vmess", "all"):
+    print("\n[ LINK VMESS WS TLS ]")
+    print(vmess_link)
+    vmess_grpc_obj = dict(vmess_obj, net="grpc", path="vmess-grpc")
+    vmess_grpc_link = "vmess://" + base64.b64encode(json.dumps(vmess_grpc_obj).encode("utf-8")).decode("utf-8")
+    print("\n[ LINK VMESS gRPC TLS ]")
+    print(vmess_grpc_link)
+
+if proto in ("vless", "all"):
+    print("\n[ LINK VLESS WS TLS ]")
+    print(vless_link)
+    print("\n[ LINK VLESS gRPC TLS ]")
+    print(vless_grpc_link)
+
+if proto in ("trojan", "all"):
+    print("\n[ LINK TROJAN WS TLS ]")
+    print(trojan_link)
+    trojan_grpc_link = f"trojan://{uuid_v}@{domain}:443?mode=gun&security=tls&type=grpc&serviceName=trojan-grpc&sni={domain}#ProgoCloud-Trojan-gRPC-{user}"
+    print("\n[ LINK TROJAN gRPC TLS ]")
+    print(trojan_grpc_link)
+
 print("=" * 60)
 PY
 }

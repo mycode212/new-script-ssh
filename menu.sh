@@ -67,6 +67,10 @@ source "${PGY_MODULE_ROOT}/features/updater.sh"
 
 # Load menu controllers
 # shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/menus/ssh_user_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/ssh_user_menu.sh"
+# shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/menus/xray_user_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/xray_user_menu.sh"
+# shellcheck source=/dev/null
 [[ -f "${PGY_MODULE_ROOT}/menus/warp_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/warp_menu.sh"
 # shellcheck source=/dev/null
 [[ -f "${PGY_MODULE_ROOT}/menus/adblock_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/adblock_menu.sh"

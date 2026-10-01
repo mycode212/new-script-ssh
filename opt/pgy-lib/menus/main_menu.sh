@@ -154,12 +154,7 @@ main_menu() {
         pgy_box_top
         pgy_box_header "USER MANAGEMENT"
         pgy_box_divider
-        pgy_menu2 "[ 1]" "Create User"      "[ 7]" "List Users"
-        pgy_menu2 "[ 2]" "Delete User"      "[ 8]" "Client Config"
-        pgy_menu2 "[ 3]" "Renew Account"    "[ 9]" "Create Trial"
-        pgy_menu2 "[ 4]" "Lock User"        "[10]" "Trial Accounts"
-        pgy_menu2 "[ 5]" "Unlock Account"   "[11]" "Bandwidth Usage"
-        pgy_menu2 "[ 6]" "Edit Details"     "[12]" "Bulk Create"
+        pgy_menu2 "[ 1]" "SSH User Manager" "[ 2]" "XRay User Manager"
         pgy_box_bot
 
         # ── SECTION 4: VPN & PROTOCOLS ────────────────────────────────
@@ -167,8 +162,8 @@ main_menu() {
         pgy_box_top
         pgy_box_header "VPN & PROTOCOLS"
         pgy_box_divider
-        pgy_menu2 "[13]" "Protocol Manager" "[15]" "Block Torrent"
-        pgy_menu2 "[14]" "Port Management"  "[16]" "Traffic Monitor"
+        pgy_menu2 "[ 3]" "Protocol & VPN Manager" "[ 5]" "Server-Side Adblocker"
+        pgy_menu2 "[ 4]" "Port Management"        "[ 6]" "Traffic & Torrent Block"
         pgy_box_bot
 
         # ── SECTION 5: SYSTEM & MAINTENANCE ───────────────────────────
@@ -176,10 +171,10 @@ main_menu() {
         pgy_box_top
         pgy_box_header "SYSTEM & MAINTENANCE"
         pgy_box_divider
-        pgy_menu2 "[17]" "Domain & SSL Cert" "[21]" "Restore Data"
-        pgy_menu2 "[18]" "SSH Banner"        "[22]" "Cleanup Expired"
-        pgy_menu2 "[19]" "Auto-Reboot Task"  "[23]" "Update Script"
-        pgy_menu2 "[20]" "Backup Data"       "[24]" "Status Lisensi"
+        pgy_menu2 "[ 7]" "Domain & SSL Cert" "[11]" "Restore Data"
+        pgy_menu2 "[ 8]" "SSH Banner"        "[12]" "Cleanup Expired"
+        pgy_menu2 "[ 9]" "Auto-Reboot Task"  "[13]" "Update Script"
+        pgy_menu2 "[10]" "Backup Data"       "[14]" "Status Lisensi"
         pgy_box_bot
 
         # ── SECTION 6: DANGER ZONE (red) ──────────────────────────────
@@ -191,37 +186,27 @@ main_menu() {
         pgy_box_bot "$C_DANGER"
 
         echo
-        if ! read -r -p "$(echo -e ${C_PROMPT}"  Pilih opsi [0-24/99]: "${C_RESET})" choice; then
+        if ! read -r -p "$(echo -e ${C_PROMPT}"  Pilih opsi [0-14/99]: "${C_RESET})" choice; then
             echo
             exit 0
         fi
         case $choice in
-            1) pgy_run_action create_user ;;
-            2) pgy_run_action delete_user ;;
-            3) pgy_run_action renew_user ;;
-            4) pgy_run_action lock_user ;;
-            5) pgy_run_action unlock_user ;;
-            6) pgy_run_action edit_user ;;
-            7) pgy_run_action list_users ;;
-            8) pgy_run_action client_config_menu ;;
-            9) pgy_run_action create_trial_account ;;
-            10) pgy_run_action list_trial_accounts ;;
-            11) pgy_run_action view_user_bandwidth ;;
-            12) pgy_run_action bulk_create_users ;;
+            1) ssh_user_management_menu ;;
+            2) xray_user_management_menu ;;
 
-            13) protocol_menu ;;
-            14) edge_public_port_menu ;;
-            15) torrent_block_menu ;;
-            16) traffic_monitor_menu ;;
+            3) protocol_menu ;;
+            4) edge_public_port_menu ;;
+            5) adblock_management_menu ;;
+            6) traffic_monitor_menu ;;
 
-            17) pgy_run_action domain_cert_menu ;;
-            18) ssh_banner_menu ;;
-            19) auto_reboot_menu ;;
-            20) backup_data_menu ;;
-            21) pgy_run_action restore_user_data ;;
-            22) pgy_run_action cleanup_expired ;;
-            23) pgy_run_action update_script ;;
-            24) pgy_run_action pgy_license_show_status ;;
+            7) pgy_run_action domain_cert_menu ;;
+            8) ssh_banner_menu ;;
+            9) auto_reboot_menu ;;
+            10) backup_data_menu ;;
+            11) pgy_run_action restore_user_data ;;
+            12) pgy_run_action cleanup_expired ;;
+            13) pgy_run_action update_script ;;
+            14) pgy_run_action pgy_license_show_status ;;
 
             99) uninstall_script ;;
             0) exit 0 ;;
