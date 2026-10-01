@@ -7,15 +7,18 @@
 write_banner_if_changed() {
     local user="$1"
     local content="$2"
-    local banner_file="$BANNER_DIR/${user}.txt"
-    local tmp_file="${banner_file}.tmp"
+    local target_dir="${BANNER_DIR:-/etc/pgytunnel/banners}"
+    mkdir -p "$target_dir"
+    local banner_file="$target_dir/${user}.txt"
+    local tmp_file="${banner_file}.tmp.$$"
 
     printf "%s" "$content" > "$tmp_file"
     if ! cmp -s "$tmp_file" "$banner_file" 2>/dev/null; then
-        mv "$tmp_file" "$banner_file"
+        mv -f "$tmp_file" "$banner_file"
     else
         rm -f "$tmp_file"
     fi
+    chmod 644 "$banner_file" 2>/dev/null || true
 }
 
 load_banner_identity() {

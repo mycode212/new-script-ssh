@@ -70,6 +70,7 @@ WS_SSH_BRIDGE_SERVICE="/etc/systemd/system/pgy-ws-ssh-bridge.service"
 WS_SSH_BRIDGE_PORT="8890"
 
 SSH_BANNER_FILE="/etc/pgytunnel/bannerssh"
+BANNER_DIR="/etc/pgytunnel/banners"
 BANNER_IDENTITY_CONF="$DB_DIR/banner_identity.conf"
 DEFAULT_BANNER_ADMIN_USERNAME="ProgoCloud"
 DEFAULT_BANNER_CHANNEL_USERNAME="progocloud"
