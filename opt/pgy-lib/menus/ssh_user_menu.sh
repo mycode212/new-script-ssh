@@ -8,8 +8,12 @@ ssh_user_management_menu() {
     while true; do
         show_banner
         local total_users online_users
-        total_users=$(count_users 2>/dev/null || echo 0)
-        online_users=$(count_online_users 2>/dev/null || echo 0)
+        if [[ -s "$DB_FILE" ]]; then
+            total_users=$(grep -v '^#' "$DB_FILE" 2>/dev/null | grep -c . || echo 0)
+        else
+            total_users=0
+        fi
+        online_users=$(count_managed_online_sessions 2>/dev/null || echo 0)
 
         echo
         pgy_box_top

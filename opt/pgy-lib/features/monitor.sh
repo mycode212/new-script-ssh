@@ -262,13 +262,10 @@ refresh_banner_cache() {
 }
 
 # ── Refresh dashboard info cache (location/ISP/IP/domain/perf) ──────────────
-# Uses ip-api.com (free, no key, 45 req/min) with a 5-minute cache.
+# Uses ip-api.com (free, no key, 45 req/min) with a 5-minute cache for network info.
 refresh_dashboard_cache() {
     local now
     now=$(date +%s)
-    if (( DASH_CACHE_TS > 0 && now - DASH_CACHE_TS < DASH_CACHE_TTL )); then
-        return
-    fi
 
     # OS + uptime (local, fast)
     DASH_CACHE_OS_NAME=$(get_clean_os_name | cut -c1-28)
@@ -293,13 +290,13 @@ refresh_dashboard_cache() {
     # Disk
     DASH_CACHE_DISK_PCT=$(df / 2>/dev/null | awk 'NR==2{gsub(/%/,""); print $5}' || echo "0")
 
-    # User counts (SSH & XRay Multi-protocol)
+    # User counts (SSH & XRay Multi-protocol - always refreshed live)
     local u_counts
     u_counts=$(pgy_get_user_counts)
     IFS='|' read -r DASH_CACHE_VMESS_USERS DASH_CACHE_VLESS_USERS DASH_CACHE_TROJAN_USERS DASH_CACHE_SSWS_USERS DASH_CACHE_SSH_USERS DASH_CACHE_TOTAL_USERS <<< "$u_counts"
     DASH_CACHE_ONLINE_USERS=$(count_managed_online_sessions)
 
-    # Bandwidth statistics (Today, Yesterday, Month, Total)
+    # Bandwidth statistics (Today, Yesterday, Month, Total - always refreshed live)
     local bw_raw
     bw_raw=$(pgy_get_bandwidth_stats)
     IFS='|' read -r DASH_CACHE_BW_TODAY DASH_CACHE_BW_YESTERDAY DASH_CACHE_BW_MONTH DASH_CACHE_BW_TOTAL <<< "$bw_raw"
@@ -312,27 +309,27 @@ refresh_dashboard_cache() {
     [[ -z "$domain" ]] && domain="None"
     DASH_CACHE_DOMAIN="$domain"
 
-    # Location / ISP / Public IP — fetch from ip-api.com (line mode, 4 fields)
-    # Fallback to ifconfig.me for IP only if ip-api fails
-    local api_data
-    api_data=$(curl -s --max-time 4 "http://ip-api.com/line/?fields=country,city,isp,query" 2>/dev/null)
-    if [[ -n "$api_data" && $(echo "$api_data" | wc -l) -ge 4 ]]; then
-        local country city isp pubip
-        country=$(echo "$api_data" | sed -n '1p')
-        city=$(echo "$api_data" | sed -n '2p')
-        isp=$(echo "$api_data" | sed -n '3p' | cut -c1-28)
-        pubip=$(echo "$api_data" | sed -n '4p')
-        [[ -n "$country" && -n "$city" ]] && DASH_CACHE_LOCATION="${country}, ${city}"
-        [[ -n "$isp" ]] && DASH_CACHE_ISP="$isp"
-        [[ -n "$pubip" ]] && DASH_CACHE_PUBLIC_IP="$pubip"
-    else
-        # Fallback: just get public IP
-        local pubip
-        pubip=$(curl -4 -s --max-time 4 ifconfig.me 2>/dev/null || echo "N/A")
-        DASH_CACHE_PUBLIC_IP="$pubip"
+    # Location / ISP / Public IP — only fetch from ip-api.com if expired (>300s)
+    if (( DASH_CACHE_TS == 0 || now - DASH_CACHE_TS >= DASH_CACHE_TTL )); then
+        local api_data
+        api_data=$(curl -s --max-time 4 "http://ip-api.com/line/?fields=country,city,isp,query" 2>/dev/null)
+        if [[ -n "$api_data" && $(echo "$api_data" | wc -l) -ge 4 ]]; then
+            local country city isp pubip
+            country=$(echo "$api_data" | sed -n '1p')
+            city=$(echo "$api_data" | sed -n '2p')
+            isp=$(echo "$api_data" | sed -n '3p' | cut -c1-28)
+            pubip=$(echo "$api_data" | sed -n '4p')
+            [[ -n "$country" && -n "$city" ]] && DASH_CACHE_LOCATION="${country}, ${city}"
+            [[ -n "$isp" ]] && DASH_CACHE_ISP="$isp"
+            [[ -n "$pubip" ]] && DASH_CACHE_PUBLIC_IP="$pubip"
+        else
+            # Fallback: just get public IP
+            local pubip
+            pubip=$(curl -4 -s --max-time 4 ifconfig.me 2>/dev/null || echo "N/A")
+            [[ -n "$pubip" && "$pubip" != "N/A" ]] && DASH_CACHE_PUBLIC_IP="$pubip"
+        fi
+        DASH_CACHE_TS=$now
     fi
-
-    DASH_CACHE_TS=$now
 }
 
 pgy_get_bandwidth_stats() {
@@ -405,31 +402,35 @@ except Exception:
 
 pgy_get_user_counts() {
     local vmess_c=0 vless_c=0 trojan_c=0 ssws_c=0 ssh_c=0 total_c=0
-    local xray_db="/etc/xray/users.json"
+    local xray_db="${XRAY_USERS_DB:-/etc/xray/users.json}"
     if [[ -f "$xray_db" ]]; then
-        if command -v jq >/dev/null 2>&1; then
-            vmess_c=$(jq -r '[.[] | select(.proto == "vmess")] | length' "$xray_db" 2>/dev/null || echo 0)
-            vless_c=$(jq -r '[.[] | select(.proto == "vless")] | length' "$xray_db" 2>/dev/null || echo 0)
-            trojan_c=$(jq -r '[.[] | select(.proto == "trojan")] | length' "$xray_db" 2>/dev/null || echo 0)
-        else
-            local counts
-            counts=$(python3 -c "
+        local py_counts
+        py_counts=$(python3 -c "
 import json
 try:
-    db = json.load(open('$xray_db'))
-    vm = len([u for u in db if u.get('proto') == 'vmess'])
-    vl = len([u for u in db if u.get('proto') == 'vless'])
-    tr = len([u for u in db if u.get('proto') == 'trojan'])
+    with open('$xray_db', 'r', encoding='utf-8') as f:
+        db = json.load(f)
+    vm = 0; vl = 0; tr = 0
+    for u in db:
+        p = str(u.get('protocol') or u.get('proto') or '').lower().strip()
+        if p == 'vmess':
+            vm += 1
+        elif p == 'vless':
+            vl += 1
+        elif p == 'trojan':
+            tr += 1
+        elif p == 'all':
+            vm += 1; vl += 1; tr += 1
     print(f'{vm}|{vl}|{tr}')
 except Exception:
     print('0|0|0')
 " 2>/dev/null || echo "0|0|0")
-            IFS='|' read -r vmess_c vless_c trojan_c <<< "$counts"
-        fi
+        IFS='|' read -r vmess_c vless_c trojan_c <<< "$py_counts"
     fi
 
-    if [[ -s "$DB_FILE" ]]; then
-        ssh_c=$(grep -v '^#' "$DB_FILE" 2>/dev/null | grep -c . || echo 0)
+    local db_path="${DB_FILE:-/etc/pgytunnel/users.db}"
+    if [[ -s "$db_path" ]]; then
+        ssh_c=$(grep -v '^[[:space:]]*#' "$db_path" 2>/dev/null | grep -c '[^[:space:]]' || echo 0)
     fi
 
     total_c=$(( vmess_c + vless_c + trojan_c + ssws_c + ssh_c ))
