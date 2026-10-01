@@ -4,7 +4,7 @@
 # Module: features/updater.sh - Script Updater & Module Sync
 # ============================================================
 
-PGY_UPDATE_DEFAULT_REPO_URL="${PGY_UPDATE_DEFAULT_REPO_URL:-https://github.com/mycode212/autoscript.git}"
+PGY_UPDATE_DEFAULT_REPO_URL="${PGY_UPDATE_DEFAULT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
 PGY_UPDATE_BRANCH="${PGY_UPDATE_BRANCH:-main}"
 
 update_script() {

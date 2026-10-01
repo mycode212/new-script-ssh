@@ -2,7 +2,7 @@
 # ============================================================
 # Auto Script SSH By : ProgoCloud
 # Entrypoint: menu.sh - Modular Tunnel Management Console
-# Repo: https://github.com/mycode212/autoscript
+# Repo: https://github.com/mycode212/new-script-ssh
 # ============================================================
 
 set -Eeuo pipefail 2>/dev/null || true

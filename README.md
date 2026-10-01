@@ -13,6 +13,8 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/mycode212/new-script-ssh/stargazers"><img src="https://img.shields.io/github/stars/mycode212/new-script-ssh?style=social" alt="Stars"></a>
+  <a href="https://github.com/mycode212/new-script-ssh/releases"><img src="https://img.shields.io/badge/Release-Stable-brightgreen" alt="Release"></a>
   <a href="https://t.me/progocloud"><img src="https://img.shields.io/badge/Telegram-@progocloud-2CA5E0?style=flat-square&logo=telegram" alt="Telegram"></a>
   <a href="https://autoscript-license-3xj.pages.dev"><img src="https://img.shields.io/badge/License_Portal-ProgoCloud-00d4ff?style=flat-square" alt="License Portal"></a>
 </p>
@@ -30,8 +32,8 @@ Arsitektur sistem dibangun secara modular di bawah pustaka `/pgy-lib/opt/` untuk
 ## Fitur Utama
 
 ### 1. Manajemen Pengguna (User Management)
-- **Operasi CRUD Akun** — Buat, hapus, perpanjang (renew), ubah password, batas login simultan (max login), dan kuota bandwidth per pengguna.
-- **Bulk Create Users** — Pembuatan akun massal secara otomatis.
+- **Operasi CRUD Akun** — Buat, hapus, perpanjang (*renew*), ubah password, batas login simultan (*max login*), dan kuota bandwidth per pengguna.
+- **Bulk Create Users** — Pembuatan banyak akun sekaligus secara otomatis.
 - **Trial Accounts** — Pembuatan akun uji coba (1–72 jam) dengan auto-cleanup dan pemantauan sisa durasi aktif.
 - **Lock & Unlock Akun** — Kunci akses akun secara instan tanpa menghapus data profil pengguna.
 - **Pembersihan Akun Kedaluwarsa** — Hapus seluruh akun yang telah expired dengan satu klik.
@@ -89,13 +91,25 @@ Arsitektur sistem dibangun secara modular di bawah pustaka `/pgy-lib/opt/` untuk
 - Hak akses penuh sebagai **root**.
 - IP VPS telah terdaftar aktif pada sistem lisensi ProgoCloud.
 
-### Perintah Instalasi (Sebagai Root):
+### 1. Metode Cepat (One-Line Command):
+
+Jalankan perintah berikut pada terminal VPS Anda sebagai root:
 
 ```bash
-bash install.sh
+apt update -y && apt install -y curl && bash <(curl -fsSL https://raw.githubusercontent.com/mycode212/new-script-ssh/main/install.sh)
 ```
 
-Setelah proses instalasi selesai, buka dashboard panel dengan mengetikkan perintah:
+### 2. Metode Git Clone:
+
+```bash
+apt update -y && apt install -y git
+git clone https://github.com/mycode212/new-script-ssh.git
+cd new-script-ssh
+chmod +x install.sh
+./install.sh
+```
+
+Setelah instalasi selesai, buka panel manajemen dengan mengetikkan:
 
 ```bash
 menu
@@ -144,4 +158,5 @@ Proses uninstaller akan membersihkan seluruh layanan background, aturan firewall
 ## Copyright & License
 
 &copy; **ProgoCloud**. All rights reserved.  
+Repository: [https://github.com/mycode212/new-script-ssh](https://github.com/mycode212/new-script-ssh)  
 Layanan & Dukungan: [https://t.me/progocloud](https://t.me/progocloud)
