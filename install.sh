@@ -16,8 +16,10 @@ if [[ -t 1 ]]; then
     C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
     C_CYAN=$'\033[38;2;0;212;255m'; C_GREEN=$'\033[38;5;46m'
     C_YELLOW=$'\033[38;5;226m'; C_RED=$'\033[38;5;196m'; C_GRAY=$'\033[38;5;245m'
+    C_TITLE=$'\033[38;5;39m'; C_WHITE=$'\033[38;5;255m'; C_DANGER=$'\033[38;5;196m'
 else
     C_RESET=''; C_BOLD=''; C_DIM=''; C_CYAN=''; C_GREEN=''; C_YELLOW=''; C_RED=''; C_GRAY=''
+    C_TITLE=''; C_WHITE=''; C_DANGER=''
 fi
 
 REPO_URL="${REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
@@ -56,14 +58,6 @@ HAD_OLD_DROPIN=false
 SSH_CHANGED=false
 FINISHED=false
 
-MODE="install"
-if [[ -x "$TARGET_MENU" || -f "$INSTALL_FLAG" || -f "$DATA_DIR/users.db" || -f "$DATA_DIR/banners_enabled" ]]; then
-    MODE="update"
-fi
-[[ -f "$TARGET_MENU" ]] && HAD_OLD_MENU=true
-[[ -d "$TARGET_LIB_DIR" ]] && HAD_OLD_LIB=true
-[[ -f "$SSHD_DROPIN" ]] && HAD_OLD_DROPIN=true
-
 BOX_MAX_WIDTH=64
 BOX_WIDTH=$BOX_MAX_WIDTH
 if [[ -t 1 ]]; then
@@ -75,6 +69,171 @@ if [[ -t 1 ]]; then
         (( BOX_WIDTH < 24 )) && BOX_WIDTH=24
     fi
 fi
+
+# Box UI Helpers
+_pgy_strip_ansi() {
+    printf '%s' "$1" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g'
+}
+
+_pgy_w() {
+    local clean
+    clean=$(_pgy_strip_ansi "$1")
+    printf '%d' "${#clean}"
+}
+
+_pgy_fit() {
+    local text="$1" max_width="$2"
+    if (( ${#text} > max_width )); then
+        printf '%s' "${text:0:max_width}"
+    else
+        printf '%s' "$text"
+    fi
+}
+
+pgy_box_top() {
+    local color="${1:-$C_CYAN}"
+    printf "  %s╔" "$color"
+    printf '═%.0s' $(seq 1 "$BOX_WIDTH")
+    printf "╗%s\n" "$C_RESET"
+}
+
+pgy_box_bot() {
+    local color="${1:-$C_CYAN}"
+    printf "  %s╚" "$color"
+    printf '═%.0s' $(seq 1 "$BOX_WIDTH")
+    printf "╝%s\n" "$C_RESET"
+}
+
+pgy_box_divider() {
+    local color="${1:-$C_CYAN}"
+    printf "  %s╟" "$color"
+    printf '─%.0s' $(seq 1 "$BOX_WIDTH")
+    printf "╢%s\n" "$C_RESET"
+}
+
+pgy_box_header() {
+    local title="$1" color="${2:-$C_CYAN}"
+    local title_clean title_content
+    title_clean=$(_pgy_fit "$title" "$BOX_WIDTH")
+    title_content="${color}${C_BOLD}${title_clean}${C_RESET}"
+    local pad=$(( (BOX_WIDTH - ${#title_clean}) / 2 ))
+    (( pad < 0 )) && pad=0
+    local lpad="" rpad=""
+    (( pad > 0 )) && printf -v lpad "%${pad}s" ""
+    local rpad_len=$(( BOX_WIDTH - ${#title_clean} - pad ))
+    (( rpad_len < 0 )) && rpad_len=0
+    (( rpad_len > 0 )) && printf -v rpad "%${rpad_len}s" ""
+    printf "  ${color}║${C_RESET}%s%s%s${color}║${C_RESET}\n" "$lpad" "$title_content" "$rpad"
+}
+
+pgy_row() {
+    local content="$1" color="${2:-$C_CYAN}"
+    local cw
+    cw=$(_pgy_w "$content")
+    local pad=$(( BOX_WIDTH - cw - 2 ))
+    local spaces=""
+    if (( pad > 0 )); then
+        printf -v spaces "%${pad}s" ""
+    fi
+    printf "  ${color}║${C_RESET} %s%s ${color}║${C_RESET}\n" "$content" "$spaces"
+}
+
+# ============================================================
+# TAHAP 1: VALIDASI LISENSI PERTAMA KALI (LANGSUNG CEK & BLOKIR)
+# ============================================================
+check_license_before_all() {
+    # Pastikan python3 dan curl terpasang untuk pemeriksaan
+    if ! command -v python3 >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -y >/dev/null 2>&1 || true
+        apt-get install -y --no-install-recommends python3 curl ca-certificates >/dev/null 2>&1 || true
+    fi
+
+    local pub_ip=""
+    pub_ip=$(curl -4 -s --max-time 5 https://api.ipify.org 2>/dev/null || curl -4 -s --max-time 5 https://ipv4.icanhazip.com 2>/dev/null || curl -4 -s --max-time 5 https://ifconfig.me/ip 2>/dev/null || true)
+    
+    local check_result check_rc
+    set +e
+    check_result=$(python3 -c "
+import urllib.request, json, sys
+
+api_url = '$PGY_LICENSE_TRUSTED_DEFAULT_API_URL'
+ip = '$pub_ip'
+payload = {'public_ipv4': ip, 'stage': 'install', 'product': 'progocloud-ssh'}
+
+try:
+    req = urllib.request.Request(
+        api_url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'pgy-installer/1.0'},
+        method='POST'
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+        allowed = bool(data.get('allowed', False))
+        reason = str(data.get('reason', '') or data.get('revoke_reason', ''))
+        status = str(data.get('status', 'allowed' if allowed else 'denied'))
+        ret_ip = str(data.get('public_ip', '') or ip)
+        print(f'{status}|{allowed}|{reason}|{ret_ip}')
+        sys.exit(0 if allowed else 1)
+except urllib.error.HTTPError as exc:
+    body = exc.read().decode('utf-8', errors='replace')
+    try:
+        data = json.loads(body)
+        reason = data.get('reason', '') or data.get('message', f'HTTP {exc.code}')
+    except Exception:
+        reason = f'HTTP {exc.code}'
+    print(f'denied|False|{reason}|{ip}')
+    sys.exit(1)
+except Exception as exc:
+    print(f'error|False|{exc}|{ip}')
+    sys.exit(1)
+" 2>&1)
+    check_rc=$?
+    set -e
+
+    if (( check_rc != 0 )); then
+        local lic_status lic_allowed lic_reason lic_ip
+        IFS='|' read -r lic_status lic_allowed lic_reason lic_ip <<< "$check_result"
+        [[ -n "$lic_ip" ]] || lic_ip="$pub_ip"
+        [[ -n "$lic_reason" ]] || lic_reason="$check_result"
+
+        [[ -t 1 ]] && clear || true
+        echo
+        pgy_box_top "$C_DANGER"
+        pgy_box_header "PROGOCLOUD LICENSE GUARD" "$C_DANGER"
+        pgy_box_divider "$C_DANGER"
+        pgy_row "$(printf "${C_RED}${C_BOLD}[AKSES DITOLAK] Lisensi VPS Tidak Aktif / Belum Terdaftar${C_RESET}")" "$C_DANGER"
+        pgy_box_divider "$C_DANGER"
+        pgy_row "$(printf "${C_GRAY}IP VPS :${C_RESET} ${C_WHITE}%s${C_RESET}" "${lic_ip:-N/A}")" "$C_DANGER"
+        pgy_box_divider "$C_DANGER"
+        pgy_row "$(printf "${C_YELLOW}[license] %s: %s${C_RESET}" "${lic_status:-denied}" "${lic_reason:-IP belum terdaftar}")" "$C_DANGER"
+        pgy_row "$(printf "${C_YELLOW}  Tindakan: Daftarkan IP di %s${C_RESET}" "$PGY_LICENSE_PORTAL_URL")" "$C_DANGER"
+        pgy_box_divider "$C_DANGER"
+        pgy_row "$(printf "${C_WHITE}Untuk aktivasi atau perpanjangan lisensi, hubungi:${C_RESET}")" "$C_DANGER"
+        pgy_row "$(printf "${C_CYAN}Telegram  :${C_RESET} ${C_WHITE}https://t.me/progocloud${C_RESET}")" "$C_DANGER"
+        pgy_row "$(printf "${C_CYAN}Website   :${C_RESET} ${C_WHITE}%s${C_RESET}" "$PGY_LICENSE_PORTAL_URL")" "$C_DANGER"
+        pgy_box_bot "$C_DANGER"
+        echo
+        echo -e "  ${C_RED}[ERROR] Proses instalasi dihentikan karena IP VPS belum terdaftar aktif di ProgoCloud.${C_RESET}\n"
+        exit 1
+    fi
+}
+
+# Jalankan pengecekan lisensi langsung sebelum proses instalasi apapun
+check_license_before_all
+
+# ============================================================
+# TAHAP 2: PROSES INSTALASI MODULAR
+# ============================================================
+
+MODE="install"
+if [[ -x "$TARGET_MENU" || -f "$INSTALL_FLAG" || -f "$DATA_DIR/users.db" || -f "$DATA_DIR/banners_enabled" ]]; then
+    MODE="update"
+fi
+[[ -f "$TARGET_MENU" ]] && HAD_OLD_MENU=true
+[[ -d "$TARGET_LIB_DIR" ]] && HAD_OLD_LIB=true
+[[ -f "$SSHD_DROPIN" ]] && HAD_OLD_DROPIN=true
 
 cleanup() {
     rm -rf "$WORK_DIR" 2>/dev/null || true
@@ -132,10 +291,8 @@ on_exit() {
         echo -e "  ${C_GRAY}Data dan konfigurasi sebelumnya tetap dipertahankan.${C_RESET}"
         if [[ -s "$LOG_FILE" ]]; then
             echo
-            echo -e "  ${C_YELLOW}Log detail kegagalan (15 baris terakhir):${C_RESET}"
-            echo -e "  ------------------------------------------------------------"
+            echo -e "  ${C_YELLOW}Log detail kegagalan:${C_RESET}"
             tail -n 15 "$LOG_FILE" | sed 's/^/  /'
-            echo -e "  ------------------------------------------------------------"
         fi
     fi
     cleanup
@@ -179,7 +336,7 @@ show_header() {
     echo
 }
 
-TOTAL_STEPS=6
+TOTAL_STEPS=5
 CURRENT_STEP=0
 CURRENT_PERCENT=0
 ANIMATION_TICKS=20
@@ -240,7 +397,6 @@ run_step() {
     return 1
 }
 
-# 1. Menyiapkan Dependensi & Source Repo
 prepare_source_environment() {
     local missing=()
     for cmd in python3 git curl bash tar iptables; do
@@ -252,13 +408,11 @@ prepare_source_environment() {
         apt-get install -y --no-install-recommends "${missing[@]}" ca-certificates >/dev/null 2>&1 || true
     fi
 
-    # Cek apakah script dijalankan langsung di dalam folder repo lokal yang lengkap
     if [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/opt/pgy-lib" && -f "$SCRIPT_DIR/menu.sh" ]]; then
         SOURCE_REPO_DIR="$SCRIPT_DIR"
         return 0
     fi
 
-    # Jika via curl / pipe, clone atau update repo ke /opt/pgy-source
     mkdir -p "$(dirname "$SOURCE_REPO_DIR")"
     if [[ -d "${SOURCE_REPO_DIR}/.git" ]]; then
         git -C "${SOURCE_REPO_DIR}" fetch --depth=1 origin "${REPO_BRANCH}" >/dev/null 2>&1 || true
@@ -270,40 +424,6 @@ prepare_source_environment() {
             return 1
         }
     fi
-
-    [[ -d "${SOURCE_REPO_DIR}/opt/pgy-lib" && -f "${SOURCE_REPO_DIR}/menu.sh" ]] || {
-        echo "[ERROR] Struktur berkas repositori tidak lengkap di ${SOURCE_REPO_DIR}" >&2
-        return 1
-    }
-}
-
-# 2. Validasi Lisensi IP VPS (Ketat)
-run_license_preflight() {
-    mkdir -p "${PGY_LICENSE_STATE_DIR}" "${DATA_DIR}/license"
-    local lic_bin="${SOURCE_REPO_DIR}/opt/pgy-lib/bin/pgy-license-check"
-    
-    if [[ ! -f "$lic_bin" ]]; then
-        lic_bin="$TARGET_LICENSE_CHECK"
-    fi
-
-    if [[ ! -f "$lic_bin" ]]; then
-        echo "[ERROR] Binary pgy-license-check tidak ditemukan di ${lic_bin}." >&2
-        return 1
-    fi
-
-    chmod +x "$lic_bin" 2>/dev/null || true
-
-    # Eksekusi pengecekan lisensi via python3
-    local lic_output lic_status
-    if ! lic_output=$(python3 "$lic_bin" check --stage install --allow-disabled=false 2>&1); then
-        lic_status=$?
-        echo "$lic_output" >> "$LOG_FILE" 2>&1 || true
-        echo -e "\n\033[0;31m[AKSES DITOLAK] Lisensi VPS Tidak Aktif / Belum Terdaftar!\033[0m" >&2
-        echo -e "\033[1;33m$lic_output\033[0m" >&2
-        echo -e "\033[0;36mSilakan daftarkan IP VPS Anda di: ${PGY_LICENSE_PORTAL_URL} atau hubungi https://t.me/progocloud\033[0m\n" >&2
-        return "$lic_status"
-    fi
-    return 0
 }
 
 backup_current_state() {
@@ -323,13 +443,11 @@ backup_current_state() {
 install_core() {
     install -d -m 755 "$TARGET_LIB_DIR" "$TARGET_OPT_LIB_DIR" "$DATA_DIR"
 
-    # Salin pustaka modular ke /pgy-lib/opt dan /usr/local/lib/pgy-ssh-tunnel
     if [[ -d "${SOURCE_REPO_DIR}/opt/pgy-lib" ]]; then
         cp -a "${SOURCE_REPO_DIR}/opt/pgy-lib/." "${TARGET_OPT_LIB_DIR}/"
         cp -a "${SOURCE_REPO_DIR}/opt/pgy-lib/." "${TARGET_LIB_DIR}/"
     fi
 
-    # Pasang executable binaries
     install -m 755 "${SOURCE_REPO_DIR}/menu.sh" "$TARGET_MENU"
     install -m 755 "${SOURCE_REPO_DIR}/menu.sh" "$TARGET_PGY"
 
@@ -341,7 +459,6 @@ install_core() {
         install -m 755 "${SOURCE_REPO_DIR}/pgy_ws_ssh_bridge.py" "$TARGET_BRIDGE"
     fi
 
-    # Salin helper scripts
     for item in openvpn_module.sh pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_ssh_auth_session.py pgy_openvpn_runtime.py pgy_ws_ssh_bridge.py; do
         if [[ -f "${SOURCE_REPO_DIR}/${item}" ]]; then
             install -m 755 "${SOURCE_REPO_DIR}/${item}" "${TARGET_LIB_DIR}/${item}"
@@ -349,7 +466,6 @@ install_core() {
         fi
     done
 
-    # Buat shortcut updater pgy-update
     cat <<'EOF' > "$TARGET_UPDATE"
 #!/bin/bash
 /usr/local/bin/menu --update-script "$@"
@@ -422,10 +538,10 @@ refresh_and_finish() {
     finish_setup
 }
 
+# Mulai instalasi jika lisensi telah tervalidasi
 show_header
-run_step "Menyiapkan Berkas Source Repo" 20 prepare_source_environment
-run_step "Validasi Lisensi IP VPS" 40 run_license_preflight
-run_step "Membuat Backup Konfigurasi" 55 backup_current_state
+run_step "Menyiapkan Berkas Source Repo" 25 prepare_source_environment
+run_step "Membuat Backup Konfigurasi" 50 backup_current_state
 run_step "Memasang Modul /pgy-lib" 75 install_core
 SSH_CHANGED=true
 run_step "Optimasi Konfigurasi SSH" 90 configure_ssh
