@@ -142,61 +142,62 @@ pgy_row() {
 # TAHAP 1: VALIDASI LISENSI PERTAMA KALI (LANGSUNG CEK & BLOKIR)
 # ============================================================
 check_license_before_all() {
-    # Pastikan python3 dan curl terpasang untuk pemeriksaan
-    if ! command -v python3 >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+    # Pastikan curl dan ca-certificates terpasang untuk pemeriksaan
+    if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y >/dev/null 2>&1 || true
-        apt-get install -y --no-install-recommends python3 curl ca-certificates >/dev/null 2>&1 || true
+        apt-get install -y --no-install-recommends curl ca-certificates python3 >/dev/null 2>&1 || true
     fi
 
     local pub_ip=""
     pub_ip=$(curl -4 -s --max-time 5 https://api.ipify.org 2>/dev/null || curl -4 -s --max-time 5 https://ipv4.icanhazip.com 2>/dev/null || curl -4 -s --max-time 5 https://ifconfig.me/ip 2>/dev/null || true)
-    
-    local check_result check_rc
+
+    local payload
+    payload=$(printf '{"public_ipv4":"%s","stage":"install","product":"progocloud-ssh"}' "$pub_ip")
+
+    local api_raw http_code json_body
     set +e
-    check_result=$(python3 -c "
-import urllib.request, json, sys
-
-api_url = '$PGY_LICENSE_TRUSTED_DEFAULT_API_URL'
-ip = '$pub_ip'
-payload = {'public_ipv4': ip, 'stage': 'install', 'product': 'progocloud-ssh'}
-
-try:
-    req = urllib.request.Request(
-        api_url,
-        data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'pgy-installer/1.0'},
-        method='POST'
-    )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        data = json.loads(resp.read().decode('utf-8'))
-        allowed = bool(data.get('allowed', False))
-        reason = str(data.get('reason', '') or data.get('revoke_reason', ''))
-        status = str(data.get('status', 'allowed' if allowed else 'denied'))
-        ret_ip = str(data.get('public_ip', '') or ip)
-        print(f'{status}|{allowed}|{reason}|{ret_ip}')
-        sys.exit(0 if allowed else 1)
-except urllib.error.HTTPError as exc:
-    body = exc.read().decode('utf-8', errors='replace')
-    try:
-        data = json.loads(body)
-        reason = data.get('reason', '') or data.get('message', f'HTTP {exc.code}')
-    except Exception:
-        reason = f'HTTP {exc.code}'
-    print(f'denied|False|{reason}|{ip}')
-    sys.exit(1)
-except Exception as exc:
-    print(f'error|False|{exc}|{ip}')
-    sys.exit(1)
-" 2>&1)
-    check_rc=$?
+    api_raw=$(curl -4 -s -w "\n%{http_code}" --max-time 10 \
+        -X POST "$PGY_LICENSE_TRUSTED_DEFAULT_API_URL" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -H "User-Agent: pgy-installer/1.0" \
+        -d "$payload" 2>&1)
     set -e
 
-    if (( check_rc != 0 )); then
-        local lic_status lic_allowed lic_reason lic_ip
-        IFS='|' read -r lic_status lic_allowed lic_reason lic_ip <<< "$check_result"
+    http_code=$(echo "$api_raw" | tail -n1)
+    json_body=$(echo "$api_raw" | sed '$d')
+
+    local allowed="false" lic_status="denied" lic_reason="" lic_ip="$pub_ip"
+
+    if [[ "$http_code" == "200" && -n "$json_body" ]]; then
+        local eval_res
+        eval_res=$(python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.argv[1])
+    allowed = 'true' if d.get('allowed', False) else 'false'
+    status = d.get('status', 'allowed' if allowed == 'true' else 'denied')
+    reason = str(d.get('reason', '') or d.get('revoke_reason', ''))
+    ret_ip = str(d.get('public_ip', '') or sys.argv[2])
+    print(f'{status}|{allowed}|{reason}|{ret_ip}')
+except Exception as e:
+    print(f'error|false|{e}|{sys.argv[2]}')
+" "$json_body" "$pub_ip" 2>/dev/null || echo "denied|false|Respons API tidak valid|$pub_ip")
+
+        IFS='|' read -r lic_status allowed lic_reason lic_ip <<< "$eval_res"
+    else
+        lic_status="denied"
+        allowed="false"
+        if [[ -n "$json_body" ]]; then
+            lic_reason=$(python3 -c "import json, sys; d=json.loads(sys.argv[1]); print(d.get('reason','') or d.get('message',''))" "$json_body" 2>/dev/null || echo "$json_body")
+        fi
+        [[ -n "$lic_reason" ]] || lic_reason="Koneksi API gagal (HTTP ${http_code:-0})"
+    fi
+
+    if [[ "$allowed" != "true" ]]; then
         [[ -n "$lic_ip" ]] || lic_ip="$pub_ip"
-        [[ -n "$lic_reason" ]] || lic_reason="$check_result"
+        [[ -n "$lic_reason" ]] || lic_reason="IP belum terdaftar aktif"
 
         [[ -t 1 ]] && clear || true
         echo
@@ -207,7 +208,7 @@ except Exception as exc:
         pgy_box_divider "$C_DANGER"
         pgy_row "$(printf "${C_GRAY}IP VPS :${C_RESET} ${C_WHITE}%s${C_RESET}" "${lic_ip:-N/A}")" "$C_DANGER"
         pgy_box_divider "$C_DANGER"
-        pgy_row "$(printf "${C_YELLOW}[license] %s: %s${C_RESET}" "${lic_status:-denied}" "${lic_reason:-IP belum terdaftar}")" "$C_DANGER"
+        pgy_row "$(printf "${C_YELLOW}[license] %s: %s${C_RESET}" "${lic_status:-denied}" "${lic_reason}")" "$C_DANGER"
         pgy_row "$(printf "${C_YELLOW}  Tindakan: Daftarkan IP di %s${C_RESET}" "$PGY_LICENSE_PORTAL_URL")" "$C_DANGER"
         pgy_box_divider "$C_DANGER"
         pgy_row "$(printf "${C_WHITE}Untuk aktivasi atau perpanjangan lisensi, hubungi:${C_RESET}")" "$C_DANGER"

@@ -172,9 +172,10 @@ def force_ipv4_network():
     original_getaddrinfo = socket.getaddrinfo
 
     def getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
-        infos = original_getaddrinfo(host, port, family, type, proto, flags)
-        ipv4_infos = [info for info in infos if info[0] == socket.AF_INET]
-        return ipv4_infos or infos
+        try:
+            return original_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+        except Exception:
+            return original_getaddrinfo(host, port, family, type, proto, flags)
 
     socket.getaddrinfo = getaddrinfo_ipv4
     try:
