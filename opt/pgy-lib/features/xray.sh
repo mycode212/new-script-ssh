@@ -317,6 +317,21 @@ for u in users:
     if proto in ("trojan", "all"):
         trojan_clients.append({"password": uuid_str, "email": username})
 
+# Load custom blacklist domains if present
+custom_black_domains = ["geosite:category-ads-all"]
+try:
+    with open("/etc/pgy-adblock/custom_blacklist.txt", "r", encoding="utf-8") as f:
+        for line in f:
+            d = line.strip()
+            if d and not d.startswith("#"):
+                custom_black_domains.append(f"domain:{d}")
+except Exception:
+    pass
+
+for rule in cfg.get("routing", {}).get("rules", []):
+    if rule.get("outboundTag") == "blocked":
+        rule["domain"] = custom_black_domains
+
 for ib in cfg.get("inbounds", []):
     tag = ib.get("tag", "")
     if "vmess" in tag:

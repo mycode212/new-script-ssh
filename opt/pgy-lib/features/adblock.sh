@@ -83,7 +83,10 @@ pgy_adblock_update_rules() {
     if pgy_adblock_is_active; then
         systemctl restart dnsmasq >/dev/null 2>&1 || true
     fi
-    echo -e "${C_GREEN}  Database Adblocker berhasil diperbarui.${C_RESET}"
+    if declare -F pgy_xray_sync_users_to_config >/dev/null 2>&1; then
+        pgy_xray_sync_users_to_config >/dev/null 2>&1 || true
+    fi
+    echo -e "${C_GREEN}  Database Adblocker berhasil diperbarui (dnsmasq & XRay).${C_RESET}"
 }
 
 pgy_adblock_is_active() {
