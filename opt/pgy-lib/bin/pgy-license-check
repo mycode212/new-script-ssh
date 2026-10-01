@@ -32,7 +32,7 @@ DEFAULTS = {
 }
 
 TRUSTED_DEFAULT_API_URL = "https://autoscript-license.worker-balancer-mang.workers.dev/api/v1/license/check"
-RENEW_PORTAL_URL = "https://autoscript.license.dpdns.org"
+RENEW_PORTAL_URL = "https://autoscript-license-3xj.pages.dev"
 SUPPORT_CONTACT = "ProgoCloud Support (https://t.me/progocloud)"
 
 IP_SOURCES = (

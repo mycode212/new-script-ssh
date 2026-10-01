@@ -115,7 +115,7 @@ pgy_display_license_block_screen() {
 
     pgy_row "$(printf "${C_WHITE}Untuk aktivasi atau perpanjangan lisensi, hubungi:${C_RESET}")" "$C_DANGER"
     pgy_row "$(printf "${C_CYAN}Telegram  :${C_RESET} ${C_WHITE}https://t.me/progocloud${C_RESET}")" "$C_DANGER"
-    pgy_row "$(printf "${C_CYAN}Website   :${C_RESET} ${C_WHITE}https://autoscript.license.dpdns.org${C_RESET}")" "$C_DANGER"
+    pgy_row "$(printf "${C_CYAN}Website   :${C_RESET} ${C_WHITE}https://autoscript-license-3xj.pages.dev${C_RESET}")" "$C_DANGER"
     pgy_box_bot "$C_DANGER"
     echo
 }
