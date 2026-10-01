@@ -17,6 +17,7 @@ main_menu() {
         fi
 
         show_banner
+        show_script_update_box_if_available 2>/dev/null || true
 
         # ── Refresh caches ─────────────────────────────────────────────
         refresh_dashboard_cache 2>/dev/null || true
@@ -97,7 +98,7 @@ main_menu() {
         # ── SECTION 6: DANGER ZONE (red) ──────────────────────────────
         echo
         pgy_box_top "$C_DANGER"
-        pgy_box_header "DANGER ZONE" "$C_DANGER"
+        pgy_box_header "DANGER ZONE" "$C_DANGER" "$C_DANGER"
         pgy_box_divider "$C_DANGER"
         pgy_menu2 "[99]" "Uninstall Script" "[ 0]" "Exit" "$C_DANGER"
         pgy_box_bot "$C_DANGER"

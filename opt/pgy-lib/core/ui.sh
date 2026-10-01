@@ -30,18 +30,18 @@ pgy_box_divider() {
 tdz_box_divider() { pgy_box_divider "$@"; }
 
 pgy_box_header() {
-    local title="$1" color="${2:-$C_CYAN}"
+    local title="$1" color="${2:-$C_CYAN}" title_color="${3:-$C_TITLE}"
     local title_clean title_content
-    title_clean=$(_pgy_fit "$title" "$PGY_BOX_WIDTH")
-    title_content="${C_TITLE}${title_clean}${C_RESET}"
-    local pad=$(( (PGY_BOX_WIDTH - ${#title_clean}) / 2 ))
-    (( pad < 0 )) && pad=0
-    local lpad="" rpad=""
-    (( pad > 0 )) && printf -v lpad "%${pad}s" ""
-    local rpad_len=$(( PGY_BOX_WIDTH - ${#title_clean} - pad ))
-    (( rpad_len < 0 )) && rpad_len=0
-    (( rpad_len > 0 )) && printf -v rpad "%${rpad_len}s" ""
-    printf "  ${color}║${C_RESET}%s%s%s${color}║${C_RESET}\n" "$lpad" "$title_content" "$rpad"
+    title_clean=$(_pgy_fit "$title" "$(( PGY_BOX_WIDTH - 6 ))")
+    title_content="${title_color}${C_BOLD}▶ ${title_clean}${C_RESET}"
+    local cw
+    cw=$(_pgy_w "$title_content")
+    local pad=$(( PGY_BOX_WIDTH - cw - 2 ))
+    local spaces=""
+    if (( pad > 0 )); then
+        printf -v spaces "%${pad}s" ""
+    fi
+    printf "  ${color}║${C_RESET} %s%s ${color}║${C_RESET}\n" "$title_content" "$spaces"
 }
 tdz_box_header() { pgy_box_header "$@"; }
 
@@ -320,9 +320,9 @@ show_banner() {
     [[ $title_rpad_len -gt 0 ]] && printf -v title_rpad "%${title_rpad_len}s" ""
     printf "  ${C_CYAN}║${C_RESET}%s%s%s${C_CYAN}║${C_RESET}\n" "$title_lpad" "$title_content" "$title_rpad"
 
-    # Subtitle line
+    # Subtitle line: Versi Script : 0.0.1
     local sub_clean sub_content
-    sub_clean=$(_pgy_fit "ProgoCloud Premium VPS Tunneling Edition" "$PGY_BOX_WIDTH")
+    sub_clean=$(_pgy_fit "Versi Script : ${PGY_SCRIPT_VERSION:-0.0.1}" "$PGY_BOX_WIDTH")
     sub_content="${C_GRAY}${sub_clean}${C_RESET}"
     local sub_pad=$(( (PGY_BOX_WIDTH - ${#sub_clean}) / 2 ))
     [[ $sub_pad -lt 0 ]] && sub_pad=0

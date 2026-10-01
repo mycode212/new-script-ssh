@@ -4,8 +4,9 @@
 # Module: core/config.sh - Global configuration paths and ports
 # ============================================================
 
+PGY_SCRIPT_VERSION="0.0.1"
 PGY_HEADER_BRAND="Auto Script SSH By : ProgoCloud"
-PGY_VERSION_TAG="v2.1.0 ProgoCloud Edition"
+PGY_VERSION_TAG="v0.0.1 ProgoCloud Edition"
 
 DB_DIR="/etc/pgytunnel"
 DB_FILE="$DB_DIR/users.db"

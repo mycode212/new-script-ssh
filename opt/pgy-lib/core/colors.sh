@@ -23,7 +23,7 @@ C_GRAY=$'\033[38;5;245m'          # Gray
 C_ORANGE=$'\033[38;5;208m'        # Orange
 
 # Semantic Aliases
-C_TITLE=$C_NAVY
+C_TITLE=$C_GREEN
 C_CHOICE=$C_CYAN
 C_PROMPT=$C_BLUE
 C_WARN=$C_YELLOW

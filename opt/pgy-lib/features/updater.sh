@@ -6,6 +6,43 @@
 
 PGY_UPDATE_DEFAULT_REPO_URL="${PGY_UPDATE_DEFAULT_REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
 PGY_UPDATE_BRANCH="${PGY_UPDATE_BRANCH:-main}"
+PGY_UPDATE_CHECK_TS=0
+PGY_UPDATE_AVAILABLE=false
+PGY_LATEST_VERSION="${PGY_SCRIPT_VERSION:-0.0.1}"
+
+check_script_update_available() {
+    local now
+    now=$(date +%s)
+    if (( PGY_UPDATE_CHECK_TS > 0 && now - PGY_UPDATE_CHECK_TS < 300 )); then
+        return 0
+    fi
+    PGY_UPDATE_CHECK_TS=$now
+
+    local remote_ver=""
+    remote_ver=$(curl -s --max-time 3 "https://raw.githubusercontent.com/mycode212/new-script-ssh/main/version.txt" 2>/dev/null | tr -d ' \r\n\t')
+    if [[ -n "$remote_ver" && "$remote_ver" != "${PGY_SCRIPT_VERSION:-0.0.1}" ]]; then
+        PGY_UPDATE_AVAILABLE=true
+        PGY_LATEST_VERSION="$remote_ver"
+    else
+        PGY_UPDATE_AVAILABLE=false
+        PGY_LATEST_VERSION="${PGY_SCRIPT_VERSION:-0.0.1}"
+    fi
+}
+
+show_script_update_box_if_available() {
+    check_script_update_available 2>/dev/null || true
+    if [[ "${PGY_UPDATE_AVAILABLE:-false}" == "true" ]]; then
+        echo
+        pgy_box_top "$C_YELLOW"
+        pgy_box_header "SCRIPT UPDATE" "$C_YELLOW" "$C_YELLOW"
+        pgy_box_divider "$C_YELLOW"
+        pgy_row "$(printf "${C_GRAY}Versi Sekarang  :${C_RESET} ${C_WHITE}%s${C_RESET}" "${PGY_SCRIPT_VERSION:-0.0.1}")" "$C_YELLOW"
+        pgy_row "$(printf "${C_GRAY}Versi Pembaruan :${C_RESET} ${C_GREEN}${C_BOLD}%s${C_RESET}" "${PGY_LATEST_VERSION}")" "$C_YELLOW"
+        pgy_box_divider "$C_YELLOW"
+        pgy_row "$(printf "${C_YELLOW}Ketik ${C_BOLD}pgy-update${C_RESET}${C_YELLOW} atau pilih menu [23] untuk update${C_RESET}")" "$C_YELLOW"
+        pgy_box_bot "$C_YELLOW"
+    fi
+}
 
 update_script() {
     pgy_screen_title "UPDATE SCRIPT" "Memperbarui modul dan binary script ProgoCloud"
