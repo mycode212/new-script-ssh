@@ -8,7 +8,7 @@
 set -Eeuo pipefail
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-    echo "Error: Installer ini harus dijalankan sebagai root (sudo bash install.sh)."
+    echo -e "\033[0;31m[ERROR] Installer ini harus dijalankan sebagai root (sudo -i / sudo bash install.sh).\033[0m"
     exit 1
 fi
 
@@ -20,6 +20,10 @@ else
     C_RESET=''; C_BOLD=''; C_DIM=''; C_CYAN=''; C_GREEN=''; C_YELLOW=''; C_RED=''; C_GRAY=''
 fi
 
+REPO_URL="${REPO_URL:-https://github.com/mycode212/new-script-ssh.git}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
+SOURCE_REPO_DIR="/opt/pgy-source"
+
 TARGET_MENU="/usr/local/bin/menu"
 TARGET_PGY="/usr/local/bin/pgy"
 TARGET_UPDATE="/usr/local/bin/pgy-update"
@@ -27,33 +31,21 @@ TARGET_LICENSE_CHECK="/usr/local/bin/pgy-license-check"
 TARGET_BRIDGE="/usr/local/bin/pgy-ws-ssh-bridge.py"
 TARGET_LIB_DIR="/usr/local/lib/pgy-ssh-tunnel"
 TARGET_OPT_LIB_DIR="/pgy-lib/opt"
-TARGET_OVPN_MODULE="$TARGET_LIB_DIR/openvpn_module.sh"
-TARGET_OVPN_GATEWAY="$TARGET_LIB_DIR/pgy_openvpn_gateway.py"
-TARGET_OVPN_PORTAL="$TARGET_LIB_DIR/pgy_openvpn_portal.py"
-TARGET_OVPN_RUNTIME="$TARGET_LIB_DIR/pgy_openvpn_runtime.py"
-TARGET_SSH_AUTH_SESSION="$TARGET_LIB_DIR/pgy_ssh_auth_session.py"
 DATA_DIR="/etc/pgytunnel"
 INSTALL_FLAG="$DATA_DIR/.install"
 SSHD_CONFIG="/etc/ssh/sshd_config"
 SSHD_DROPIN_DIR="/etc/ssh/sshd_config.d"
 SSHD_DROPIN="$SSHD_DROPIN_DIR/pgytunnel.conf"
+
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || true)"
 
 # License constants
 PGY_LICENSE_STATE_DIR="/var/lib/pgy-license"
 PGY_LICENSE_TRUSTED_DEFAULT_API_URL="https://autoscript-license.worker-balancer-mang.workers.dev/api/v1/license/check"
+PGY_LICENSE_PORTAL_URL="https://autoscript-license-3xj.pages.dev"
 
 WORK_DIR="$(mktemp -d /tmp/pgy-installer.XXXXXX)"
 LOG_FILE="$WORK_DIR/install.log"
-PAYLOAD_MENU="$WORK_DIR/menu.sh"
-PAYLOAD_BRIDGE="$WORK_DIR/pgy_ws_ssh_bridge.py"
-PAYLOAD_OVPN_MODULE="$WORK_DIR/openvpn_module.sh"
-PAYLOAD_OVPN_GATEWAY="$WORK_DIR/pgy_openvpn_gateway.py"
-PAYLOAD_OVPN_PORTAL="$WORK_DIR/pgy_openvpn_portal.py"
-PAYLOAD_OVPN_RUNTIME="$WORK_DIR/pgy_openvpn_runtime.py"
-PAYLOAD_SSH_AUTH_SESSION="$WORK_DIR/pgy_ssh_auth_session.py"
-PAYLOAD_LICENSE_CHECK="$WORK_DIR/pgy-license-check"
-
 OLD_MENU="$WORK_DIR/menu.previous"
 OLD_LIB_DIR="$WORK_DIR/lib.previous"
 OLD_SSHD_CONFIG="$WORK_DIR/sshd_config.previous"
@@ -65,8 +57,7 @@ SSH_CHANGED=false
 FINISHED=false
 
 MODE="install"
-if [[ -x "$TARGET_MENU" || -f "$INSTALL_FLAG" || -f "$DATA_DIR/users.db" ||
-      -f "$DATA_DIR/banners_enabled" ]]; then
+if [[ -x "$TARGET_MENU" || -f "$INSTALL_FLAG" || -f "$DATA_DIR/users.db" || -f "$DATA_DIR/banners_enabled" ]]; then
     MODE="update"
 fi
 [[ -f "$TARGET_MENU" ]] && HAD_OLD_MENU=true
@@ -86,7 +77,7 @@ if [[ -t 1 ]]; then
 fi
 
 cleanup() {
-    rm -rf "$WORK_DIR"
+    rm -rf "$WORK_DIR" 2>/dev/null || true
 }
 
 restart_ssh() {
@@ -139,6 +130,13 @@ on_exit() {
         echo
         echo -e "  ${C_RED}${C_BOLD}Instalasi tidak dapat diselesaikan.${C_RESET}"
         echo -e "  ${C_GRAY}Data dan konfigurasi sebelumnya tetap dipertahankan.${C_RESET}"
+        if [[ -s "$LOG_FILE" ]]; then
+            echo
+            echo -e "  ${C_YELLOW}Log detail kegagalan (15 baris terakhir):${C_RESET}"
+            echo -e "  ------------------------------------------------------------"
+            tail -n 15 "$LOG_FILE" | sed 's/^/  /'
+            echo -e "  ------------------------------------------------------------"
+        fi
     fi
     cleanup
     exit "$rc"
@@ -242,64 +240,70 @@ run_step() {
     return 1
 }
 
-# License check before installation
-run_license_preflight() {
-    mkdir -p "${PGY_LICENSE_STATE_DIR}" "${DATA_DIR}/license"
-    local lic_bin="${SCRIPT_DIR}/opt/pgy-lib/bin/pgy-license-check"
-    if [[ ! -f "$lic_bin" ]]; then
-        lic_bin="$TARGET_LICENSE_CHECK"
-    fi
-    if [[ -f "$lic_bin" ]]; then
-        chmod +x "$lic_bin" 2>/dev/null || true
-        python3 "$lic_bin" check --stage install --allow-disabled=false
-    else
-        return 0
-    fi
-}
-
-prepare_payload() {
-    # Check dependencies
+# 1. Menyiapkan Dependensi & Source Repo
+prepare_source_environment() {
     local missing=()
-    for cmd in python3 curl bash tar iptables; do
+    for cmd in python3 git curl bash tar iptables; do
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
     if (( ${#missing[@]} > 0 )); then
+        export DEBIAN_FRONTEND=noninteractive
         apt-get update -y >/dev/null 2>&1 || true
-        apt-get install -y "${missing[@]}" >/dev/null 2>&1 || true
+        apt-get install -y --no-install-recommends "${missing[@]}" ca-certificates >/dev/null 2>&1 || true
     fi
 
-    if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/menu.sh" ]]; then
-        cp "$SCRIPT_DIR/menu.sh" "$PAYLOAD_MENU"
-    fi
-    [[ -s "$PAYLOAD_MENU" ]] && bash -n "$PAYLOAD_MENU"
-
-    if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/pgy_ws_ssh_bridge.py" ]]; then
-        cp "$SCRIPT_DIR/pgy_ws_ssh_bridge.py" "$PAYLOAD_BRIDGE"
+    # Cek apakah script dijalankan langsung di dalam folder repo lokal yang lengkap
+    if [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/opt/pgy-lib" && -f "$SCRIPT_DIR/menu.sh" ]]; then
+        SOURCE_REPO_DIR="$SCRIPT_DIR"
+        return 0
     fi
 
-    if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/opt/pgy-lib/bin/pgy-license-check" ]]; then
-        cp "$SCRIPT_DIR/opt/pgy-lib/bin/pgy-license-check" "$PAYLOAD_LICENSE_CHECK"
+    # Jika via curl / pipe, clone atau update repo ke /opt/pgy-source
+    mkdir -p "$(dirname "$SOURCE_REPO_DIR")"
+    if [[ -d "${SOURCE_REPO_DIR}/.git" ]]; then
+        git -C "${SOURCE_REPO_DIR}" fetch --depth=1 origin "${REPO_BRANCH}" >/dev/null 2>&1 || true
+        git -C "${SOURCE_REPO_DIR}" reset --hard "origin/${REPO_BRANCH}" >/dev/null 2>&1 || true
+    else
+        rm -rf "${SOURCE_REPO_DIR}"
+        git clone --depth=1 -b "${REPO_BRANCH}" "${REPO_URL}" "${SOURCE_REPO_DIR}" >/dev/null 2>&1 || {
+            echo "[ERROR] Gagal mengkloning repository: ${REPO_URL}" >&2
+            return 1
+        }
     fi
 
-    local source_file payload_file
-    while IFS='|' read -r source_file payload_file; do
-        if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/$source_file" ]]; then
-            cp "$SCRIPT_DIR/$source_file" "$payload_file"
-        fi
-        [[ -s "$payload_file" ]] || return 1
-    done <<EOF
-openvpn_module.sh|$PAYLOAD_OVPN_MODULE
-pgy_openvpn_gateway.py|$PAYLOAD_OVPN_GATEWAY
-pgy_openvpn_portal.py|$PAYLOAD_OVPN_PORTAL
-pgy_openvpn_runtime.py|$PAYLOAD_OVPN_RUNTIME
-pgy_ssh_auth_session.py|$PAYLOAD_SSH_AUTH_SESSION
-EOF
-    bash -n "$PAYLOAD_OVPN_MODULE"
-    if command -v python3 >/dev/null 2>&1; then
-        PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile \
-            "$PAYLOAD_OVPN_GATEWAY" "$PAYLOAD_OVPN_PORTAL" "$PAYLOAD_OVPN_RUNTIME" \
-            "$PAYLOAD_SSH_AUTH_SESSION"
+    [[ -d "${SOURCE_REPO_DIR}/opt/pgy-lib" && -f "${SOURCE_REPO_DIR}/menu.sh" ]] || {
+        echo "[ERROR] Struktur berkas repositori tidak lengkap di ${SOURCE_REPO_DIR}" >&2
+        return 1
+    }
+}
+
+# 2. Validasi Lisensi IP VPS (Ketat)
+run_license_preflight() {
+    mkdir -p "${PGY_LICENSE_STATE_DIR}" "${DATA_DIR}/license"
+    local lic_bin="${SOURCE_REPO_DIR}/opt/pgy-lib/bin/pgy-license-check"
+    
+    if [[ ! -f "$lic_bin" ]]; then
+        lic_bin="$TARGET_LICENSE_CHECK"
     fi
+
+    if [[ ! -f "$lic_bin" ]]; then
+        echo "[ERROR] Binary pgy-license-check tidak ditemukan di ${lic_bin}." >&2
+        return 1
+    fi
+
+    chmod +x "$lic_bin" 2>/dev/null || true
+
+    # Eksekusi pengecekan lisensi via python3
+    local lic_output lic_status
+    if ! lic_output=$(python3 "$lic_bin" check --stage install --allow-disabled=false 2>&1); then
+        lic_status=$?
+        echo "$lic_output" >> "$LOG_FILE" 2>&1 || true
+        echo -e "\n\033[0;31m[AKSES DITOLAK] Lisensi VPS Tidak Aktif / Belum Terdaftar!\033[0m" >&2
+        echo -e "\033[1;33m$lic_output\033[0m" >&2
+        echo -e "\033[0;36mSilakan daftarkan IP VPS Anda di: ${PGY_LICENSE_PORTAL_URL} atau hubungi https://t.me/progocloud\033[0m\n" >&2
+        return "$lic_status"
+    fi
+    return 0
 }
 
 backup_current_state() {
@@ -319,35 +323,33 @@ backup_current_state() {
 install_core() {
     install -d -m 755 "$TARGET_LIB_DIR" "$TARGET_OPT_LIB_DIR" "$DATA_DIR"
 
-    # Install modular library to /pgy-lib/opt and /usr/local/lib/pgy-ssh-tunnel
-    if [[ -d "${SCRIPT_DIR}/opt/pgy-lib" ]]; then
-        cp -a "${SCRIPT_DIR}/opt/pgy-lib/." "${TARGET_OPT_LIB_DIR}/"
-        cp -a "${SCRIPT_DIR}/opt/pgy-lib/." "${TARGET_LIB_DIR}/"
+    # Salin pustaka modular ke /pgy-lib/opt dan /usr/local/lib/pgy-ssh-tunnel
+    if [[ -d "${SOURCE_REPO_DIR}/opt/pgy-lib" ]]; then
+        cp -a "${SOURCE_REPO_DIR}/opt/pgy-lib/." "${TARGET_OPT_LIB_DIR}/"
+        cp -a "${SOURCE_REPO_DIR}/opt/pgy-lib/." "${TARGET_LIB_DIR}/"
     fi
 
-    install -m 755 "$PAYLOAD_MENU" "$TARGET_MENU"
-    install -m 755 "$PAYLOAD_MENU" "$TARGET_PGY"
+    # Pasang executable binaries
+    install -m 755 "${SOURCE_REPO_DIR}/menu.sh" "$TARGET_MENU"
+    install -m 755 "${SOURCE_REPO_DIR}/menu.sh" "$TARGET_PGY"
 
-    if [[ -s "$PAYLOAD_BRIDGE" ]]; then
-        install -m 755 "$PAYLOAD_BRIDGE" "$TARGET_BRIDGE"
+    if [[ -f "${SOURCE_REPO_DIR}/opt/pgy-lib/bin/pgy-license-check" ]]; then
+        install -m 755 "${SOURCE_REPO_DIR}/opt/pgy-lib/bin/pgy-license-check" "$TARGET_LICENSE_CHECK"
     fi
 
-    if [[ -s "$PAYLOAD_LICENSE_CHECK" ]]; then
-        install -m 755 "$PAYLOAD_LICENSE_CHECK" "$TARGET_LICENSE_CHECK"
+    if [[ -f "${SOURCE_REPO_DIR}/pgy_ws_ssh_bridge.py" ]]; then
+        install -m 755 "${SOURCE_REPO_DIR}/pgy_ws_ssh_bridge.py" "$TARGET_BRIDGE"
     fi
 
-    install -m 644 "$PAYLOAD_OVPN_MODULE" "$TARGET_OVPN_MODULE"
-    install -m 644 "$PAYLOAD_OVPN_MODULE" "$TARGET_OPT_LIB_DIR/openvpn_module.sh"
-    install -m 755 "$PAYLOAD_OVPN_GATEWAY" "$TARGET_OVPN_GATEWAY"
-    install -m 755 "$PAYLOAD_OVPN_GATEWAY" "$TARGET_OPT_LIB_DIR/pgy_openvpn_gateway.py"
-    install -m 755 "$PAYLOAD_OVPN_PORTAL" "$TARGET_OVPN_PORTAL"
-    install -m 755 "$PAYLOAD_OVPN_PORTAL" "$TARGET_OPT_LIB_DIR/pgy_openvpn_portal.py"
-    install -m 755 "$PAYLOAD_SSH_AUTH_SESSION" "$TARGET_SSH_AUTH_SESSION"
-    install -m 755 "$PAYLOAD_SSH_AUTH_SESSION" "$TARGET_OPT_LIB_DIR/pgy_ssh_auth_session.py"
-    install -m 755 "$PAYLOAD_OVPN_RUNTIME" "$TARGET_OVPN_RUNTIME"
-    install -m 755 "$PAYLOAD_OVPN_RUNTIME" "$TARGET_OPT_LIB_DIR/pgy_openvpn_runtime.py"
+    # Salin helper scripts
+    for item in openvpn_module.sh pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_ssh_auth_session.py pgy_openvpn_runtime.py pgy_ws_ssh_bridge.py; do
+        if [[ -f "${SOURCE_REPO_DIR}/${item}" ]]; then
+            install -m 755 "${SOURCE_REPO_DIR}/${item}" "${TARGET_LIB_DIR}/${item}"
+            install -m 755 "${SOURCE_REPO_DIR}/${item}" "${TARGET_OPT_LIB_DIR}/${item}"
+        fi
+    done
 
-    # Install updater command
+    # Buat shortcut updater pgy-update
     cat <<'EOF' > "$TARGET_UPDATE"
 #!/bin/bash
 /usr/local/bin/menu --update-script "$@"
@@ -421,12 +423,12 @@ refresh_and_finish() {
 }
 
 show_header
-run_step "Validasi Lisensi IP VPS" 15 run_license_preflight
-run_step "Menyiapkan Berkas Modular" 35 prepare_payload
-run_step "Membuat Backup Konfigurasi" 50 backup_current_state
-run_step "Memasang Modul /pgy-lib" 70 install_core
+run_step "Menyiapkan Berkas Source Repo" 20 prepare_source_environment
+run_step "Validasi Lisensi IP VPS" 40 run_license_preflight
+run_step "Membuat Backup Konfigurasi" 55 backup_current_state
+run_step "Memasang Modul /pgy-lib" 75 install_core
 SSH_CHANGED=true
-run_step "Optimasi Konfigurasi SSH" 85 configure_ssh
+run_step "Optimasi Konfigurasi SSH" 90 configure_ssh
 run_step "Memulai Layanan & Runtime" 100 refresh_and_finish
 
 FINISHED=true
