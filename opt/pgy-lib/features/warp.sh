@@ -170,6 +170,7 @@ pgy_warp_test_unlock() {
     echo -e "${C_TITLE}  --- HASIL UJI UNLOCK STREAMING & AI VIA WARP ---${C_RESET}"
     echo
     local socks="socks5h://127.0.0.1:${WARP_SOCKS_PORT}"
+    local ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     # 1. Test Cloudflare Trace
     echo -ne "  [1] Cloudflare Edge Routing : "
@@ -178,7 +179,7 @@ pgy_warp_test_unlock() {
     if [[ -n "$trace" ]]; then
         ip_loc=$(echo "$trace" | grep '^loc=' | cut -d= -f2)
         warp_mode=$(echo "$trace" | grep '^warp=' | cut -d= -f2)
-        echo -e "${C_GREEN}TERHUBUNG (Loc: ${ip_loc}, Mode: ${warp_mode})${C_RESET}"
+        echo -e "${C_GREEN}TERHUBUNG (Region: ${ip_loc:-N/A}, WARP: ${warp_mode:-on})${C_RESET}"
     else
         echo -e "${C_RED}GAGAL TERHUBUNG${C_RESET}"
     fi
@@ -186,23 +187,25 @@ pgy_warp_test_unlock() {
     # 2. Test Netflix
     echo -ne "  [2] Netflix Streaming       : "
     local nf_code
-    nf_code=$(curl -s -o /dev/null -w "%{http_code}" -x "$socks" --connect-timeout 5 --max-time 10 "https://www.netflix.com/title/80018499" 2>/dev/null || echo "000")
-    if [[ "$nf_code" == "200" ]]; then
-        echo -e "${C_GREEN}UNLOCKED / BEBAS BLOKIR (HTTP 200)${C_RESET}"
+    nf_code=$(curl -sL --max-redirs 5 -o /dev/null -w "%{http_code}" -x "$socks" -A "$ua" --connect-timeout 6 --max-time 12 "https://www.netflix.com/title/80018499" 2>/dev/null || echo "000")
+    if [[ "$nf_code" == "200" || "$nf_code" == "301" || "$nf_code" == "302" ]]; then
+        echo -e "${C_GREEN}UNLOCKED / BEBAS BLOKIR (HTTP ${nf_code})${C_RESET}"
     elif [[ "$nf_code" == "403" || "$nf_code" == "404" ]]; then
-        echo -e "${C_YELLOW}TERBATAS (HTTP ${nf_code})${C_RESET}"
+        echo -e "${C_YELLOW}TERBATAS / NON-ORIGINALS (HTTP ${nf_code})${C_RESET}"
     else
-        echo -e "${C_RED}TIMEOUT / ERROR (${nf_code})${C_RESET}"
+        echo -e "${C_RED}ERROR / TIMEOUT (${nf_code})${C_RESET}"
     fi
 
     # 3. Test OpenAI / ChatGPT
     echo -ne "  [3] OpenAI / ChatGPT Access : "
     local ai_code
-    ai_code=$(curl -s -o /dev/null -w "%{http_code}" -x "$socks" --connect-timeout 5 --max-time 10 "https://chatgpt.com" 2>/dev/null || echo "000")
-    if [[ "$ai_code" == "200" || "$ai_code" == "301" || "$ai_code" == "302" || "$ai_code" == "403" && "$ai_code" != "1020" ]]; then
-        echo -e "${C_GREEN}LOLOS (HTTP ${ai_code})${C_RESET}"
+    ai_code=$(curl -s -o /dev/null -w "%{http_code}" -x "$socks" -A "$ua" --connect-timeout 6 --max-time 12 "https://api.openai.com/v1/models" 2>/dev/null || echo "000")
+    if [[ "$ai_code" == "401" || "$ai_code" == "200" || "$ai_code" == "302" ]]; then
+        echo -e "${C_GREEN}UNLOCKED / BEBAS BLOKIR (API Reachable - HTTP ${ai_code})${C_RESET}"
+    elif [[ "$ai_code" == "403" ]]; then
+        echo -e "${C_YELLOW}CLOUDFLARE CHALLENGE (HTTP 403)${C_RESET}"
     else
-        echo -e "${C_RED}TERBLOKIR (HTTP ${ai_code})${C_RESET}"
+        echo -e "${C_RED}TERBLOKIR (${ai_code})${C_RESET}"
     fi
     echo
 }
