@@ -380,6 +380,10 @@ pgy_openvpn_ensure_service_user() {
     PGY_OVPN_SERVICE_USER_CREATED=1
 }
 
+pgy_openvpn_ensure_service_account() {
+    pgy_openvpn_ensure_service_user "$@"
+}
+
 pgy_openvpn_apply_private_permissions() {
     # The transport gateways need only the copied outer-TLS certificate/key.
     # The OpenVPN server key, CA key, tls-crypt key, configs, hooks, and state
@@ -2406,7 +2410,7 @@ pgy_openvpn_restart_action() {
     pgy_openvpn_progress_done
 
     pgy_openvpn_progress_begin 2 4 "Preparing certificates & validating configuration"
-    pgy_openvpn_ensure_service_account >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    pgy_openvpn_ensure_service_user >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_ensure_pki >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_prepare_gateway_certificate >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_write_hooks >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
@@ -2498,8 +2502,12 @@ pgy_openvpn_restart_action() {
         pgy_openvpn_port_listening "$PGY_OVPN_PORTAL_PORT" tcp || missing_ports+=("Portal:$PGY_OVPN_PORTAL_PORT")
         [[ ${#missing_ports[@]} -gt 0 ]] && echo -e "  ${C_YELLOW}Unreachable ports:${C_RESET} ${missing_ports[*]}"
 
-        if [[ -f "$PGY_OVPN_DIAG_LOG" ]]; then
-            echo -e "  ${C_DIM}Log file: $PGY_OVPN_DIAG_LOG${C_RESET}"
+        if [[ -f "$PGY_OVPN_DIAG_LOG" && -s "$PGY_OVPN_DIAG_LOG" ]]; then
+            echo
+            echo -e "  ${C_RED}Log validation / startup error excerpt:${C_RESET}"
+            tail -n 6 "$PGY_OVPN_DIAG_LOG" | sed 's/^/    /'
+            echo
+            echo -e "  ${C_DIM}Full log: $PGY_OVPN_DIAG_LOG${C_RESET}"
         fi
         return 1
     fi
