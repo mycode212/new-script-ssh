@@ -24,6 +24,7 @@ domain_cert_menu() {
     pgy_menu1 "[ 3]" "Use / Renew Existing Certificate"
     pgy_menu1 "[ 4]" "Import Fullchain and Private Key"
     pgy_menu1 "[ 5]" "Remove Current Certificate"
+    pgy_menu1 "[ 6]" "Cloudflare Tunnel (Zero Trust HTTPS)"
     pgy_box_divider
     pgy_menu1 "[ 0]" "Return"
     pgy_box_bot
@@ -31,6 +32,14 @@ domain_cert_menu() {
     read -r -p "$(echo -e "${C_PROMPT}  Select an option: ${C_RESET}")" dc_choice
 
     case "$dc_choice" in
+        6)
+            if declare -F cftunnel_management_menu >/dev/null 2>&1; then
+                cftunnel_management_menu
+            else
+                echo -e "\n${C_RED}[ERROR] Modul Cloudflare Tunnel belum dimuat.${C_RESET}"
+                sleep 1
+            fi
+            ;;
         1)
             local domain_name email
             echo -e "\n${C_BLUE}[INFO] Before continuing, make sure your domain's A record points to this server's IP.${C_RESET}"

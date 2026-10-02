@@ -168,6 +168,9 @@ pgy_uninstall_optional_components() {
     if declare -F pgy_openvpn_uninstall >/dev/null 2>&1; then
         pgy_openvpn_uninstall silent || cleanup_failed=true
     fi
+    if declare -F pgy_cftunnel_uninstall >/dev/null 2>&1; then
+        pgy_cftunnel_uninstall >/dev/null 2>&1 || cleanup_failed=true
+    fi
     uninstall_zivpn || cleanup_failed=true
     uninstall_dnstt || cleanup_failed=true
     uninstall_badvpn || cleanup_failed=true
@@ -206,6 +209,7 @@ pgy_uninstall_application_files() {
     rm -rf "$DB_DIR" "$PGY_LIB_DIR" "$PGY_OPT_LIB_DIR" "/pgy-lib" "$PGY_LICENSE_STATE_DIR"
     rm -f "$WS_SSH_BRIDGE_SCRIPT" "$WS_SSH_BRIDGE_SERVICE"
     rm -f "/etc/systemd/system/pgy-api.service" "/usr/local/bin/pgy_api_service.py" "/usr/local/bin/pgy-speedtest"
+    rm -f "/usr/local/bin/cloudflared" "/etc/pgytunnel/cf_tunnel.conf" "/etc/systemd/system/cloudflared.service"
     rm -f "/usr/local/bin/pgy" "/usr/local/bin/pgy-update" "/usr/local/bin/pgy-license-check"
     for diagnostic in "$PGY_PACKAGE_LOG" "$PGY_CERTIFICATE_LOG" "$PGY_SERVICE_LOG" \
         "${PGY_OVPN_DIAG_LOG:-/var/log/pgy-openvpn-setup.log}"; do

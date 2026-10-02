@@ -1892,6 +1892,15 @@ pgy_openvpn_show_details() {
         pgy_detail "SSL / SNI" "$PGY_OVPN_SSL_PORT / $PGY_OVPN_HOST" "$C_WHITE"
         pgy_detail "Outer TLS" "$tls_label" "$C_CYAN"
         pgy_detail "Download Portal" "https://${PGY_OVPN_HOST}:${PGY_OVPN_PORTAL_PORT}${PGY_OVPN_PUBLIC_PATH}/" "$C_GREEN"
+        local cf_vpn_domain=""
+        if declare -F pgy_cftunnel_get_config_val >/dev/null 2>&1; then
+            cf_vpn_domain=$(pgy_cftunnel_get_config_val "CF_TUNNEL_VPN_DOMAIN" "")
+        elif [[ -f "/etc/pgytunnel/cf_tunnel.conf" ]]; then
+            cf_vpn_domain=$(grep "^CF_TUNNEL_VPN_DOMAIN=" "/etc/pgytunnel/cf_tunnel.conf" 2>/dev/null | cut -d'=' -f2- | tr -d '"'\'' ')
+        fi
+        if [[ -n "$cf_vpn_domain" ]]; then
+            pgy_detail "Tunnel Portal" "https://${cf_vpn_domain}${PGY_OVPN_PUBLIC_PATH}/" "$C_GREEN"
+        fi
         pgy_box_bot
     else
         printf '  Server: %s\n  Portal: https://%s:%s%s/\n' \
@@ -2586,6 +2595,15 @@ pgy_openvpn_append_client_details() {
     pgy_detail "SSL / SNI" "$PGY_OVPN_SSL_PORT / $PGY_OVPN_HOST" "$C_WHITE"
     pgy_detail "Outer TLS" "$tls_label" "$C_CYAN"
     pgy_detail "Download Portal" "https://${PGY_OVPN_HOST}:${PGY_OVPN_PORTAL_PORT}${PGY_OVPN_PUBLIC_PATH}/" "$C_GREEN"
+    local cf_vpn_domain=""
+    if declare -F pgy_cftunnel_get_config_val >/dev/null 2>&1; then
+        cf_vpn_domain=$(pgy_cftunnel_get_config_val "CF_TUNNEL_VPN_DOMAIN" "")
+    elif [[ -f "/etc/pgytunnel/cf_tunnel.conf" ]]; then
+        cf_vpn_domain=$(grep "^CF_TUNNEL_VPN_DOMAIN=" "/etc/pgytunnel/cf_tunnel.conf" 2>/dev/null | cut -d'=' -f2- | tr -d '"'\'' ')
+    fi
+    if [[ -n "$cf_vpn_domain" ]]; then
+        pgy_detail "Tunnel Portal" "https://${cf_vpn_domain}${PGY_OVPN_PUBLIC_PATH}/" "$C_GREEN"
+    fi
     pgy_box_divider "$C_CYAN"
     pgy_row "${C_GRAY}Use the same SSH username and password shown above.${C_RESET}" "$C_CYAN"
     pgy_box_bot "$C_CYAN"

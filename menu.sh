@@ -68,6 +68,8 @@ source "${PGY_MODULE_ROOT}/features/updater.sh"
 [[ -f "${PGY_MODULE_ROOT}/features/speedtest.sh" ]] && source "${PGY_MODULE_ROOT}/features/speedtest.sh"
 # shellcheck source=/dev/null
 [[ -f "${PGY_MODULE_ROOT}/features/api.sh" ]] && source "${PGY_MODULE_ROOT}/features/api.sh"
+# shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/features/cftunnel.sh" ]] && source "${PGY_MODULE_ROOT}/features/cftunnel.sh"
 
 # Load menu controllers
 # shellcheck source=/dev/null
@@ -84,6 +86,8 @@ source "${PGY_MODULE_ROOT}/features/updater.sh"
 [[ -f "${PGY_MODULE_ROOT}/menus/speedtest_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/speedtest_menu.sh"
 # shellcheck source=/dev/null
 [[ -f "${PGY_MODULE_ROOT}/menus/api_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/api_menu.sh"
+# shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/menus/cftunnel_menu.sh" ]] && source "${PGY_MODULE_ROOT}/menus/cftunnel_menu.sh"
 # shellcheck source=/dev/null
 source "${PGY_MODULE_ROOT}/menus/protocol_menu.sh"
 # shellcheck source=/dev/null

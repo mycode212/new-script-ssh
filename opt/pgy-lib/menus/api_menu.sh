@@ -13,10 +13,13 @@ api_management_menu() {
         local status_color="$C_RED"
         [[ "$s_status" == "active" ]] && status_color="$C_GREEN"
 
-        local api_port api_key allowed_ips
+        local api_port api_key allowed_ips cf_api_domain=""
         api_port=$(pgy_api_get_config_val "API_PORT" "8780")
         api_key=$(pgy_api_get_config_val "API_KEY" "Belum Diatur")
         allowed_ips=$(pgy_api_get_config_val "ALLOWED_IPS" "ALL")
+        if declare -F pgy_cftunnel_get_config_val >/dev/null 2>&1; then
+            cf_api_domain=$(pgy_cftunnel_get_config_val "CF_TUNNEL_API_DOMAIN" "")
+        fi
 
         # Mask API key for display
         local masked_key="None"
@@ -29,6 +32,9 @@ api_management_menu() {
         pgy_box_header "PROGOCLOUD REST API DAEMON"
         pgy_box_divider
         pgy_row "${C_GRAY}STATUS :${C_RESET} ${status_color}${s_status^^}${C_RESET} ${C_GRAY}(Port: ${api_port})${C_RESET}"
+        if [[ -n "$cf_api_domain" ]]; then
+            pgy_row "${C_GRAY}TUNNEL :${C_RESET} ${C_GREEN}https://${cf_api_domain}${C_RESET} ${C_GRAY}(Zero Trust)${C_RESET}"
+        fi
         pgy_row "${C_GRAY}AUTH   :${C_RESET} ${C_CYAN}${masked_key}${C_RESET}"
         pgy_row "${C_GRAY}IP ACL :${C_RESET} ${C_YELLOW}${allowed_ips}${C_RESET}"
         pgy_box_divider
@@ -173,14 +179,23 @@ api_management_menu() {
                     pgy_row "$(printf "${C_RED}✖ API Service tidak merespons (Pastikan service AKTIF).${C_RESET}")" "$C_CYAN"
                 fi
                 pgy_box_divider "$C_CYAN"
-                pgy_row "$(printf "${C_CYAN}Endpoint Status VPS (GET):${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_CYAN}Endpoint Status VPS (Direct HTTP):${C_RESET}")" "$C_CYAN"
                 pgy_row "$(printf "${C_WHITE}curl -s -H 'X-API-Key: %s' http://%s:%s/api/v1/system/status${C_RESET}" "$api_key" "$api_host" "$api_port")" "$C_CYAN"
+                if [[ -n "$cf_api_domain" ]]; then
+                    pgy_box_divider "$C_CYAN"
+                    pgy_row "$(printf "${C_GREEN}Endpoint Cloudflare Tunnel (HTTPS Zero Trust):${C_RESET}")" "$C_CYAN"
+                    pgy_row "$(printf "${C_WHITE}curl -s -H 'X-API-Key: %s' https://%s/api/v1/system/status${C_RESET}" "$api_key" "$cf_api_domain")" "$C_CYAN"
+                fi
                 pgy_box_divider "$C_CYAN"
                 pgy_row "$(printf "${C_CYAN}Endpoint Buat User SSH (POST):${C_RESET}")" "$C_CYAN"
                 pgy_row "$(printf "${C_WHITE}curl -s -X POST -H 'Content-Type: application/json' \\${C_RESET}")" "$C_CYAN"
                 pgy_row "$(printf "${C_WHITE}  -H 'X-API-Key: %s' \\${C_RESET}" "$api_key")" "$C_CYAN"
                 pgy_row "$(printf "${C_WHITE}  -d '{\"username\":\"testuser\",\"password\":\"pass123\",\"days\":30}' \\${C_RESET}")" "$C_CYAN"
-                pgy_row "$(printf "${C_WHITE}  http://%s:%s/api/v1/user/create${C_RESET}" "$api_host" "$api_port")" "$C_CYAN"
+                if [[ -n "$cf_api_domain" ]]; then
+                    pgy_row "$(printf "${C_WHITE}  https://%s/api/v1/user/create${C_RESET}" "$cf_api_domain")" "$C_CYAN"
+                else
+                    pgy_row "$(printf "${C_WHITE}  http://%s:%s/api/v1/user/create${C_RESET}" "$api_host" "$api_port")" "$C_CYAN"
+                fi
                 pgy_box_bot "$C_CYAN"
                 echo
                 press_enter

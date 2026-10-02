@@ -79,9 +79,13 @@ Arsitektur sistem dibangun secara modular di bawah `/pgy-lib/opt/` (`opt/pgy-lib
 - **Keamanan Kriptografis** — Autentikasi token `X-API-Key` 32-karakter, IP Whitelisting ACL, dan Rate Limiter 60 req/menit.
 - **Otomatisasi Reseller & Billing Bot** — Endpoint JSON lengkap untuk pembuatan akun instan, perpanjangan masa aktif (*renew*), kunci/buka user, hapus user, cek profil akun, dan status resource VPS real-time.
 
-### 8. Keamanan, Lisensi, & Backup
+### 8. Cloudflare Tunnel (Zero Trust HTTPS)
+- **Zero Firewall Inbound Port** — Mengakses OpenVPN Web Portal (`localhost:1180`) dan REST API Daemon (`localhost:8780`) melalui domain HTTPS penuh tanpa perlu membuka port di firewall atau terhalang keterbatasan port non-standar CDN Cloudflare.
+- **Manajemen Token Terintegrasi** — Pemasangan connector token Cloudflare Zero Trust satu klik dengan auto-restart service `cloudflared`.
+
+### 9. Keamanan, Lisensi, & Backup
 - **ProgoCloud License Guard** — Validasi otomatis IP publik VPS ke server lisensi resmi ProgoCloud.
-- **Domain & SSL Certificate Manager** — Penerbitan sertifikat SSL otomatis via Let's Encrypt (Certbot), sertifikat custom, atau self-signed.
+- **Domain & SSL Certificate Manager** — Penerbitan sertifikat SSL otomatis via Let's Encrypt (Certbot), sertifikat custom, self-signed, atau Cloudflare Tunnel.
 - **Cloud Backup to Telegram** — Pencadangan database akun terenkripsi yang langsung dikirimkan ke Bot Telegram pribadi Anda.
 - **Scheduled Auto-Reboot** — Pemeliharaan otomatis dengan reboot server terjadwal setiap pukul 00:00 WIB.
 
