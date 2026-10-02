@@ -2171,16 +2171,12 @@ pgy_openvpn_restore_default_ports() {
         echo -e "${C_RED}[ERROR] Saved OpenVPN settings are invalid. Run OpenVPN repair first.${C_RESET}"
         return 1
     }
-    if pgy_openvpn_ports_match_fixed_mapping; then
-        echo -e "${C_YELLOW}[INFO] Default OpenVPN ports are already active. Nothing was changed.${C_RESET}"
-        return 0
-    fi
-    echo -e "${C_YELLOW}[WARNING] Restoring default ports restarts OpenVPN and disconnects active OpenVPN sessions.${C_RESET}"
-    if ! read -r -p "$(echo -e "${C_PROMPT}  Restore Portal 1180 and methods 446-450? Type yes: ${C_RESET}")" confirm; then
+    echo -e "${C_YELLOW}[WARNING] Restoring default ports re-configures OpenVPN to default ports (1180, 446-450) and restarts all services.${C_RESET}"
+    if ! read -r -p "$(echo -e "${C_PROMPT}  Restore default layout (Portal 1180, methods 446-450)? Type yes: ${C_RESET}")" confirm; then
         confirm=""
     fi
     [[ "$confirm" == "yes" ]] || {
-        echo -e "${C_YELLOW}[CANCELLED] Existing OpenVPN ports were kept.${C_RESET}"
+        echo -e "${C_YELLOW}[CANCELLED] Action cancelled.${C_RESET}"
         return 0
     }
     pgy_openvpn_apply_port_layout "$PGY_OVPN_FIXED_PORTAL_PORT" "$PGY_OVPN_FIXED_SSL_PORT" \
@@ -2413,7 +2409,15 @@ pgy_openvpn_restart_action() {
     pgy_openvpn_ensure_service_account >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_ensure_pki >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_prepare_gateway_certificate >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_write_hooks >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_write_pam >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    local pam_plugin
+    pam_plugin=$(pgy_openvpn_find_pam_plugin 2>/dev/null || true)
+    $failed || pgy_openvpn_write_server_config tcp tcp-server "$PGY_OVPN_TCP_PORT" "$PGY_OVPN_TCP_SUBNET" "$pam_plugin" >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_write_server_config udp udp "$PGY_OVPN_UDP_PORT" "$PGY_OVPN_UDP_SUBNET" "$pam_plugin" >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_generate_profiles >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_apply_private_permissions >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_write_network_service >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_write_systemd_units >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
     $failed || pgy_openvpn_validate_runtime_files || failed=true
     if $failed; then
