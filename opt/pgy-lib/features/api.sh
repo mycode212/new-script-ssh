@@ -47,13 +47,19 @@ pgy_api_set_config_val() {
 pgy_api_install_service() {
     pgy_api_init_config
 
-    # Ensure python script is installed to /usr/local/bin
-    if [[ -f "${PGY_SOURCE_DIR:-.}/pgy_api_service.py" ]]; then
-        install -m 755 "${PGY_SOURCE_DIR:-.}/pgy_api_service.py" "$PGY_API_PYTHON_BIN"
-    elif [[ -f "/usr/local/lib/pgy-ssh-tunnel/pgy_api_service.py" ]]; then
-        install -m 755 "/usr/local/lib/pgy-ssh-tunnel/pgy_api_service.py" "$PGY_API_PYTHON_BIN"
-    elif [[ -f "/opt/pgy-lib/pgy_api_service.py" ]]; then
-        install -m 755 "/opt/pgy-lib/pgy_api_service.py" "$PGY_API_PYTHON_BIN"
+    local py_src=""
+    if [[ -f "${PGY_SOURCE_DIR:-.}/pgy_api_service.py" && "${PGY_SOURCE_DIR:-.}/pgy_api_service.py" != "$PGY_API_PYTHON_BIN" ]]; then
+        py_src="${PGY_SOURCE_DIR:-.}/pgy_api_service.py"
+    elif [[ -f "/usr/local/lib/pgy-ssh-tunnel/pgy_api_service.py" && "/usr/local/lib/pgy-ssh-tunnel/pgy_api_service.py" != "$PGY_API_PYTHON_BIN" ]]; then
+        py_src="/usr/local/lib/pgy-ssh-tunnel/pgy_api_service.py"
+    elif [[ -f "/opt/pgy-lib/pgy_api_service.py" && "/opt/pgy-lib/pgy_api_service.py" != "$PGY_API_PYTHON_BIN" ]]; then
+        py_src="/opt/pgy-lib/pgy_api_service.py"
+    fi
+
+    if [[ -n "$py_src" && -f "$py_src" ]]; then
+        install -m 755 "$py_src" "$PGY_API_PYTHON_BIN" 2>/dev/null || true
+    elif [[ -f "$PGY_API_PYTHON_BIN" ]]; then
+        chmod 755 "$PGY_API_PYTHON_BIN" 2>/dev/null || true
     fi
 
     cat > "$PGY_API_SERVICE_FILE" <<EOF

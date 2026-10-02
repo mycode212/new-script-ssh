@@ -49,27 +49,42 @@ api_management_menu() {
 
         case $choice in
             1)
+                echo
                 if [[ "$s_status" == "active" ]]; then
-                    echo -e "\n${C_BLUE}Menghentikan daemon REST API...${C_RESET}"
+                    pgy_progress_begin 1 2 "Menghentikan daemon REST API"
                     pgy_api_stop
+                    pgy_progress_done
+                    pgy_progress_begin 2 2 "Memperbarui konfigurasi sistem"
+                    sleep 0.4
+                    pgy_progress_done
+                    echo
                     pgy_message OK "Daemon API berhasil dihentikan."
                 else
-                    echo -e "\n${C_BLUE}Memulai daemon REST API...${C_RESET}"
+                    pgy_progress_begin 1 3 "Menyiapkan binary dan konfigurasi API"
+                    pgy_api_install_service
+                    pgy_progress_done
+                    pgy_progress_begin 2 3 "Mengaktifkan service unit systemd"
+                    systemctl enable pgy-api >/dev/null 2>&1 || true
+                    pgy_progress_done
+                    pgy_progress_begin 3 3 "Menjalankan daemon REST API di port ${api_port}"
                     pgy_api_start
+                    pgy_progress_done
+                    echo
                     pgy_message OK "Daemon API berhasil dijalankan di port ${api_port}."
                 fi
                 press_enter
                 ;;
             2)
                 clear; show_banner
+                pgy_screen_title "REST API SECRET KEY" "Gunakan token ini pada header HTTP request (X-API-Key)"
                 echo
-                pgy_box_top
-                pgy_box_header "REST API SECRET KEY"
-                pgy_box_divider
-                pgy_row "${C_GRAY}API Key:${C_RESET} ${C_GREEN}${api_key}${C_RESET}"
-                pgy_row "${C_GRAY}Port   :${C_RESET} ${C_CYAN}${api_port}${C_RESET}"
-                pgy_row "${C_GRAY}Header :${C_RESET} ${C_YELLOW}X-API-Key: ${api_key}${C_RESET}"
-                pgy_box_bot
+                pgy_box_top "$C_CYAN"
+                pgy_box_header "DETAIL KREDENSIAL API" "$C_CYAN" "$C_CYAN"
+                pgy_box_divider "$C_CYAN"
+                pgy_detail "API Key" "${api_key}" "$C_GREEN"
+                pgy_detail "Port" "${api_port}" "$C_CYAN"
+                pgy_detail "Header Format" "X-API-Key: ${api_key}" "$C_YELLOW"
+                pgy_box_bot "$C_CYAN"
                 echo
                 press_enter
                 ;;
@@ -77,8 +92,15 @@ api_management_menu() {
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Yakin ingin mengacak ulang API Key? Integrasi bot lama akan terputus! [y/N]: ${C_RESET}")" confirm_regen
                 if [[ "$confirm_regen" == "y" || "$confirm_regen" == "Y" ]]; then
+                    echo
+                    pgy_progress_begin 1 2 "Membuat token kriptografis baru"
                     local new_k
                     new_k=$(pgy_api_regenerate_key)
+                    pgy_progress_done
+                    pgy_progress_begin 2 2 "Menerapkan kunci dan memuat ulang daemon"
+                    sleep 0.4
+                    pgy_progress_done
+                    echo
                     pgy_message OK "API Key baru berhasil dibuat: ${new_k}"
                 else
                     pgy_message CANCELLED "Operasi dibatalkan."
@@ -89,10 +111,18 @@ api_management_menu() {
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Masukkan Port API Baru (1024-65535) [${api_port}]: ${C_RESET}")" input_port
                 if [[ -n "$input_port" ]]; then
-                    if pgy_api_set_port "$input_port"; then
-                        pgy_message OK "Port API berhasil diubah ke ${input_port} dan service di-restart."
-                    else
+                    if [[ ! "$input_port" =~ ^[0-9]+$ ]] || (( input_port < 1024 || input_port > 65535 )); then
                         pgy_message ERROR "Port tidak valid. Harus berupa angka 1024 - 65535."
+                    else
+                        echo
+                        pgy_progress_begin 1 2 "Menyimpan port ${input_port} ke konfigurasi"
+                        pgy_api_set_config_val "API_PORT" "$input_port"
+                        pgy_progress_done
+                        pgy_progress_begin 2 2 "Memuat ulang service daemon di port baru"
+                        pgy_api_restart
+                        pgy_progress_done
+                        echo
+                        pgy_message OK "Port API berhasil diubah ke ${input_port} dan service di-restart."
                     fi
                 fi
                 press_enter
@@ -102,34 +132,48 @@ api_management_menu() {
                 echo -e "  ${C_DIM}Format: ALL (semua IP), atau pisahkan IP dengan koma (contoh: 1.2.3.4, 5.6.7.8/24)${C_RESET}"
                 read -r -p "$(echo -e "${C_PROMPT}  Masukkan IP Whitelist [${allowed_ips}]: ${C_RESET}")" input_ips
                 if [[ -n "$input_ips" ]]; then
+                    echo
+                    pgy_progress_begin 1 2 "Memperbarui daftar IP Whitelist"
                     pgy_api_set_allowed_ips "$input_ips"
-                    pgy_message OK "IP Whitelist berhasil diperbarui."
+                    pgy_progress_done
+                    pgy_progress_begin 2 2 "Menerapkan aturan ACL pada daemon"
+                    sleep 0.4
+                    pgy_progress_done
+                    echo
+                    pgy_message OK "IP Whitelist berhasil diperbarui: ${input_ips}"
                 fi
                 press_enter
                 ;;
             6)
                 clear; show_banner
+                pgy_screen_title "API TESTING & INTEGRATION" "Dokumentasi cURL & status respon endpoint lokal"
                 echo
-                pgy_box_top
-                pgy_box_header "API TESTING & INTEGRATION EXAMPLES"
-                pgy_box_divider
-                pgy_row "${C_CYAN}Endpoint Status VPS:${C_RESET}"
-                pgy_row "curl -s -H 'X-API-Key: ${api_key}' http://127.0.0.1:${api_port}/api/v1/system/status"
-                pgy_box_divider
-                pgy_row "${C_CYAN}Endpoint Buat User SSH:${C_RESET}"
-                pgy_row "curl -s -X POST -H 'Content-Type: application/json' \\"
-                pgy_row "  -H 'X-API-Key: ${api_key}' \\"
-                pgy_row "  -d '{\"username\":\"testuser\",\"password\":\"pass123\",\"days\":30,\"limit\":2}' \\"
-                pgy_row "  http://127.0.0.1:${api_port}/api/v1/user/create"
-                pgy_box_divider
-                
-                echo -e "  ${C_BLUE}Menguji koneksi internal ke API...${C_RESET}"
+                pgy_progress_begin 1 1 "Menguji endpoint http://127.0.0.1:${api_port}/api/v1/system/status"
+                local test_ok=false
                 if pgy_api_test_local; then
-                    pgy_row "${C_GREEN}✔ API Service berjalan normal dan merespons dengan benar!${C_RESET}"
-                else
-                    pgy_row "${C_RED}✖ API Service tidak merespons (Pastikan service AKTIF).${C_RESET}"
+                    test_ok=true
                 fi
-                pgy_box_bot
+                pgy_progress_done
+                echo
+
+                pgy_box_top "$C_CYAN"
+                pgy_box_header "HASIL UJI KONEKSI API" "$C_CYAN" "$C_CYAN"
+                pgy_box_divider "$C_CYAN"
+                if $test_ok; then
+                    pgy_row "$(printf "${C_GREEN}✔ API Service berjalan normal dan merespons dengan benar!${C_RESET}")" "$C_CYAN"
+                else
+                    pgy_row "$(printf "${C_RED}✖ API Service tidak merespons (Pastikan service AKTIF).${C_RESET}")" "$C_CYAN"
+                fi
+                pgy_box_divider "$C_CYAN"
+                pgy_row "$(printf "${C_CYAN}Endpoint Status VPS:${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}curl -s -H 'X-API-Key: %s' http://127.0.0.1:%s/api/v1/system/status${C_RESET}" "$api_key" "$api_port")" "$C_CYAN"
+                pgy_box_divider "$C_CYAN"
+                pgy_row "$(printf "${C_CYAN}Endpoint Buat User SSH:${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}curl -s -X POST -H 'Content-Type: application/json' \\${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}  -H 'X-API-Key: %s' \\${C_RESET}" "$api_key")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}  -d '{\"username\":\"testuser\",\"password\":\"pass123\",\"days\":30}' \\${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}  http://127.0.0.1:%s/api/v1/user/create${C_RESET}" "$api_port")" "$C_CYAN"
+                pgy_box_bot "$C_CYAN"
                 echo
                 press_enter
                 ;;
