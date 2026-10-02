@@ -832,7 +832,9 @@ frontend internal_decryptor
     tcp-request inspect-delay 500ms
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    acl is_v2ray payload(0,64) -m sub /vmess || payload(0,64) -m sub /vless || payload(0,64) -m sub /trojan
+    acl is_v2ray payload(0,64) -m sub /vmess
+    acl is_v2ray payload(0,64) -m sub /vless
+    acl is_v2ray payload(0,64) -m sub /trojan
     acl is_grpc payload(0,64) -m sub -grpc
 
     tcp-request content accept if is_ssh
@@ -841,7 +843,8 @@ frontend internal_decryptor
     tcp-request content accept if HTTP
 
     use_backend direct_ssh if is_ssh
-    use_backend nginx_cleartext if is_v2ray || is_grpc
+    use_backend nginx_cleartext if is_v2ray
+    use_backend nginx_cleartext if is_grpc
     default_backend pgy_ws_ssh_bridge
 
 # ====================================================================
@@ -910,14 +913,17 @@ configure_edge_stack() {
     pgy_progress_done
 
     pgy_progress_begin 3 4 "Validating service configuration"
-    if ! nginx -t >/dev/null 2>&1; then
+    local val_err=""
+    if ! val_err=$(nginx -t 2>&1); then
         pgy_progress_failed
-        echo -e "${C_RED}[ERROR] Service configuration validation failed.${C_RESET}"
+        echo -e "${C_RED}[ERROR] Nginx configuration validation failed:${C_RESET}"
+        echo "$val_err"
         return 1
     fi
-    if ! haproxy -c -f "$HAPROXY_CONFIG" >/dev/null 2>&1; then
+    if ! val_err=$(haproxy -c -f "$HAPROXY_CONFIG" 2>&1); then
         pgy_progress_failed
-        echo -e "${C_RED}[ERROR] Service configuration validation failed.${C_RESET}"
+        echo -e "${C_RED}[ERROR] HAProxy configuration validation failed:${C_RESET}"
+        echo "$val_err"
         return 1
     fi
     pgy_progress_done
