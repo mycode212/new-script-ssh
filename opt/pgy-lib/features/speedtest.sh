@@ -83,10 +83,8 @@ pgy_speedtest_get_isp_info() {
 }
 
 pgy_speedtest_run_quick() {
-    clear; show_banner
-    echo
-    echo -e "  ${C_CYAN}▶ QUICK SPEEDTEST (BEST SERVER)${C_RESET}"
-    echo -e "${C_DIM}Mengukur kecepatan download, upload, ping, dan jitter ke server terdekat...${C_RESET}"
+    show_banner
+    pgy_screen_title "QUICK SPEEDTEST (BEST SERVER)" "Mengukur kecepatan download, upload, ping, dan jitter ke server terdekat..."
     echo
 
     pgy_progress_begin 1 2 "Menyiapkan binary Ookla Speedtest"
@@ -154,7 +152,8 @@ pgy_speedtest_run_quick() {
     pgy_detail "Upload Speed" "${ul_mbps} Mbps" "$C_CYAN"
     if [[ -n "$result_url" ]]; then
         pgy_box_divider "$C_CYAN"
-        pgy_detail "Hasil Gambar" "$result_url" "$C_YELLOW"
+        pgy_row "$(printf "${C_GRAY}Hasil Gambar :${C_RESET}")" "$C_CYAN"
+        pgy_row "$(printf "${C_YELLOW}%s${C_RESET}" "$result_url")" "$C_CYAN"
     fi
     pgy_box_bot "$C_CYAN"
     echo
@@ -163,10 +162,8 @@ pgy_speedtest_run_quick() {
 
 pgy_speedtest_run_target() {
     local target_code=$1 target_label=$2
-    clear; show_banner
-    echo
-    echo -e "  ${C_CYAN}▶ TARGET SPEEDTEST: ${target_label^^}${C_RESET}"
-    echo -e "${C_DIM}Mencari server terbaik di region ${target_label}...${C_RESET}"
+    show_banner
+    pgy_screen_title "TARGET SPEEDTEST: ${target_label^^}" "Mencari server terbaik di region ${target_label}..."
     echo
 
     pgy_progress_begin 1 3 "Menyiapkan binary Speedtest CLI"
@@ -263,7 +260,8 @@ pgy_speedtest_run_target() {
     pgy_detail "Upload Speed" "${ul_mbps} Mbps" "$C_CYAN"
     if [[ -n "$result_url" ]]; then
         pgy_box_divider "$C_CYAN"
-        pgy_detail "Hasil Gambar" "$result_url" "$C_YELLOW"
+        pgy_row "$(printf "${C_GRAY}Hasil Gambar :${C_RESET}")" "$C_CYAN"
+        pgy_row "$(printf "${C_YELLOW}%s${C_RESET}" "$result_url")" "$C_CYAN"
     fi
     pgy_box_bot "$C_CYAN"
     echo
@@ -271,10 +269,8 @@ pgy_speedtest_run_target() {
 }
 
 pgy_speedtest_gaming_latency() {
-    clear; show_banner
-    echo
-    echo -e "  ${C_CYAN}▶ GAME SERVER LATENCY & JITTER DIAGNOSTIC${C_RESET}"
-    echo -e "${C_DIM}Mengukur stabilitas ping & jitter ke server game terpopuler (BadVPN / ZiVPN)...${C_RESET}"
+    show_banner
+    pgy_screen_title "GAME SERVER LATENCY & JITTER" "Mengukur stabilitas ping & jitter ke server game terpopuler..."
     echo
 
     local -A games=(
