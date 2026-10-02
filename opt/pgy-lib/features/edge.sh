@@ -835,7 +835,7 @@ frontend internal_decryptor
     acl is_v2ray payload(0,64) -m sub /vmess
     acl is_v2ray payload(0,64) -m sub /vless
     acl is_v2ray payload(0,64) -m sub /trojan
-    acl is_grpc payload(0,64) -m sub -grpc
+    acl is_grpc payload(0,64) -m sub grpc
 
     tcp-request content accept if is_ssh
     tcp-request content accept if is_v2ray
