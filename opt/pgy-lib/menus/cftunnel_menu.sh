@@ -56,35 +56,58 @@ cftunnel_management_menu() {
                 clear; show_banner
                 pgy_screen_title "OTOMATISASI CLOUDFLARE TUNNEL & DOMAIN" "Membuat Tunnel, Ingress Rules, & DNS CNAME secara otomatis via Cloudflare API"
                 echo
-                echo -e "  ${C_CYAN}Pilih Metode Autentikasi Cloudflare:${C_RESET}"
-                echo -e "  ${C_WHITE}1. API Token${C_RESET} ${C_GRAY}(Direkomendasikan: Izin Zone.DNS + Account.Cloudflare Tunnel)${C_RESET}"
-                echo -e "  ${C_WHITE}2. Global API Key + Email${C_RESET}"
-                echo
-                read -r -p "$(echo -e "${C_PROMPT}  Pilih metode [1/2]: ${C_RESET}")" auth_mode_choice
-                local cf_auth_type="token" cf_auth_val="" cf_auth_email=""
-                if [[ "$auth_mode_choice" == "2" ]]; then
-                    cf_auth_type="global"
-                    read -r -p "$(echo -e "${C_PROMPT}  Masukkan Email Akun Cloudflare: ${C_RESET}")" cf_auth_email
-                    read -r -p "$(echo -e "${C_PROMPT}  Masukkan Global API Key: ${C_RESET}")" cf_auth_val
-                else
-                    cf_auth_type="token"
-                    read -r -p "$(echo -e "${C_PROMPT}  Masukkan Cloudflare API Token: ${C_RESET}")" cf_auth_val
+
+                local cf_auth_type="token" cf_auth_val="" cf_auth_email="" in_domain=""
+
+                if declare -F pgy_cf_is_configured >/dev/null 2>&1 && pgy_cf_is_configured; then
+                    pgy_cf_load_config
+                    echo -e "  ${C_GREEN}✔ Kredensial Cloudflare Terdaftar Terdeteksi!${C_RESET}"
+                    echo -e "    Domain Utama : ${C_YELLOW}${CF_ZONE_NAME}${C_RESET}"
+                    echo -e "    Auth Mode    : ${C_WHITE}${CF_AUTH_MODE}${C_RESET}"
+                    echo
+                    read -r -p "$(echo -e "${C_PROMPT}  Gunakan kredensial & domain di atas? [Y/n]: ${C_RESET}")" use_saved_cf
+                    if [[ "$use_saved_cf" != "n" && "$use_saved_cf" != "N" ]]; then
+                        cf_auth_type="$CF_AUTH_MODE"
+                        if [[ "$cf_auth_type" == "token" ]]; then
+                            cf_auth_val="$CF_API_TOKEN"
+                        else
+                            cf_auth_email="$CF_CF_EMAIL"
+                            cf_auth_val="$CF_GLOBAL_KEY"
+                        fi
+                        in_domain="$CF_ZONE_NAME"
+                    fi
                 fi
 
                 if [[ -z "$cf_auth_val" ]]; then
-                    pgy_message ERROR "API Token / Key tidak boleh kosong."
+                    echo -e "  ${C_CYAN}Pilih Metode Autentikasi Cloudflare:${C_RESET}"
+                    echo -e "  ${C_WHITE}1. API Token${C_RESET} ${C_GRAY}(Direkomendasikan: Izin Zone.DNS + Account.Cloudflare Tunnel)${C_RESET}"
+                    echo -e "  ${C_WHITE}2. Global API Key + Email${C_RESET}"
                     echo
-                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
-                    continue
-                fi
+                    read -r -p "$(echo -e "${C_PROMPT}  Pilih metode [1/2]: ${C_RESET}")" auth_mode_choice
+                    if [[ "$auth_mode_choice" == "2" ]]; then
+                        cf_auth_type="global"
+                        read -r -p "$(echo -e "${C_PROMPT}  Masukkan Email Akun Cloudflare: ${C_RESET}")" cf_auth_email
+                        read -r -p "$(echo -e "${C_PROMPT}  Masukkan Global API Key: ${C_RESET}")" cf_auth_val
+                    else
+                        cf_auth_type="token"
+                        read -r -p "$(echo -e "${C_PROMPT}  Masukkan Cloudflare API Token: ${C_RESET}")" cf_auth_val
+                    fi
 
-                echo
-                read -r -p "$(echo -e "${C_PROMPT}  Masukkan Domain Utama (contoh: arjunacloud.app): ${C_RESET}")" in_domain
-                if [[ -z "$in_domain" ]]; then
-                    pgy_message ERROR "Domain utama tidak boleh kosong."
+                    if [[ -z "$cf_auth_val" ]]; then
+                        pgy_message ERROR "API Token / Key tidak boleh kosong."
+                        echo
+                        read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                        continue
+                    fi
+
                     echo
-                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
-                    continue
+                    read -r -p "$(echo -e "${C_PROMPT}  Masukkan Domain Utama (contoh: arjunacloud.app): ${C_RESET}")" in_domain
+                    if [[ -z "$in_domain" ]]; then
+                        pgy_message ERROR "Domain utama tidak boleh kosong."
+                        echo
+                        read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                        continue
+                    fi
                 fi
 
                 read -r -p "$(echo -e "${C_PROMPT}  Prefix Subdomain OpenVPN [default: vpn]: ${C_RESET}")" in_vpn_sub
@@ -120,15 +143,25 @@ cftunnel_management_menu() {
                 pgy_progress_done
 
                 pgy_progress_begin 4 4 "Memasang & menjalankan service cloudflared di VPS"
-                local out_token out_vpn_dom out_api_dom
+                local out_token out_vpn_dom out_api_dom out_tun_id out_acc_id out_zone_id
                 out_token=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("tunnel_token", ""))')
                 out_vpn_dom=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("vpn_domain", ""))')
                 out_api_dom=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("api_domain", ""))')
+                out_tun_id=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("tunnel_id", ""))')
+                out_acc_id=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("account_id", ""))')
+                out_zone_id=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("zone_id", ""))')
 
                 if ! pgy_cftunnel_install_service_token "$out_token"; then
                     pgy_progress_failed
                     pgy_message ERROR "Gagal menjalankan service cloudflared di VPS."
                 else
+                    pgy_cftunnel_set_config_val "CF_AUTH_TYPE" "$cf_auth_type"
+                    pgy_cftunnel_set_config_val "CF_AUTH_VAL" "$cf_auth_val"
+                    pgy_cftunnel_set_config_val "CF_AUTH_EMAIL" "$cf_auth_email"
+                    pgy_cftunnel_set_config_val "CF_TUNNEL_ROOT_DOMAIN" "$in_domain"
+                    pgy_cftunnel_set_config_val "CF_TUNNEL_ID" "$out_tun_id"
+                    pgy_cftunnel_set_config_val "CF_ACCOUNT_ID" "$out_acc_id"
+                    pgy_cftunnel_set_config_val "CF_ZONE_ID" "$out_zone_id"
                     pgy_cftunnel_set_config_val "CF_TUNNEL_VPN_DOMAIN" "$out_vpn_dom"
                     pgy_cftunnel_set_config_val "CF_TUNNEL_API_DOMAIN" "$out_api_dom"
                     pgy_progress_done

@@ -198,6 +198,16 @@ api_management_menu() {
                 else
                     pgy_row "$(printf "${C_WHITE}  http://%s:%s/api/v1/user/create${C_RESET}" "$api_host" "$api_port")" "$C_CYAN"
                 fi
+                pgy_box_divider "$C_CYAN"
+                pgy_row "$(printf "${C_CYAN}Endpoint Buat Akun Xray (VMess/VLess/Trojan) (POST):${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}curl -s -X POST -H 'Content-Type: application/json' \\${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}  -H 'X-API-Key: %s' \\${C_RESET}" "$api_key")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}  -d '{\"username\":\"xrayuser\",\"protocol\":\"all\",\"days\":30}' \\${C_RESET}")" "$C_CYAN"
+                if [[ -n "$cf_api_domain" ]]; then
+                    pgy_row "$(printf "${C_WHITE}  https://%s/api/v1/xray/create${C_RESET}" "$cf_api_domain")" "$C_CYAN"
+                else
+                    pgy_row "$(printf "${C_WHITE}  http://%s:%s/api/v1/xray/create${C_RESET}" "$api_host" "$api_port")" "$C_CYAN"
+                fi
                 pgy_box_bot "$C_CYAN"
                 echo
                 press_enter

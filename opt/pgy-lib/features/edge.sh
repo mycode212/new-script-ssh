@@ -13,21 +13,31 @@ domain_cert_menu() {
 
         local cert_domain="${EDGE_DOMAIN:-Not configured}"
         local cert_mode="${EDGE_CERT_MODE:-None}"
+
+        local cf_status="${C_RED}Belum Dikonfigurasi${C_RESET}"
+        if declare -F pgy_cf_is_configured >/dev/null 2>&1 && pgy_cf_is_configured; then
+            pgy_cf_load_config
+            cf_status="${C_GREEN}Terhubung${C_RESET} (${C_YELLOW}${CF_ZONE_NAME}${C_RESET})"
+        fi
+
         echo
         pgy_box_top
-        pgy_box_header "DOMAIN & SSL"
+        pgy_box_header "DOMAIN & SSL MANAGEMENT"
         pgy_box_divider
         pgy_kv2 "DOMAIN" "$cert_domain" "MODE" "$cert_mode"
+        pgy_detail "CLOUDFLARE API" "$cf_status"
         if [[ -n "$EDGE_EMAIL" ]]; then
             pgy_row "${C_GRAY}EMAIL${C_RESET} ${C_WHITE}$EDGE_EMAIL${C_RESET}"
         fi
         pgy_box_divider
-        pgy_menu1 "[ 1]" "Issue / Renew Let's Encrypt"
-        pgy_menu1 "[ 2]" "Generate Self-Signed Certificate"
-        pgy_menu1 "[ 3]" "Use / Renew Existing Certificate"
-        pgy_menu1 "[ 4]" "Import Fullchain and Private Key"
-        pgy_menu1 "[ 5]" "Remove Current Certificate"
-        pgy_menu1 "[ 6]" "Cloudflare Tunnel (Zero Trust HTTPS)"
+        pgy_menu1 "[ 1]" "1-Click Auto Pointing Subdomain VPS (Cloudflare)"
+        pgy_menu1 "[ 2]" "Issue / Renew Let's Encrypt SSL"
+        pgy_menu1 "[ 3]" "Generate Self-Signed Certificate"
+        pgy_menu1 "[ 4]" "Use / Renew Existing Certificate"
+        pgy_menu1 "[ 5]" "Import Fullchain and Private Key"
+        pgy_menu1 "[ 6]" "Cloudflare Automation Hub (DNS & Zone)"
+        pgy_menu1 "[ 7]" "Cloudflare Tunnel (Zero Trust HTTPS)"
+        pgy_menu1 "[ 8]" "Remove Current Certificate"
         pgy_box_divider
         pgy_menu1 "[ 0]" "Return"
         pgy_box_bot
@@ -35,7 +45,23 @@ domain_cert_menu() {
         read -r -p "$(echo -e "${C_PROMPT}  Select an option: ${C_RESET}")" dc_choice
 
         case "$dc_choice" in
+            1)
+                if declare -F pgy_cf_auto_pointing_subdomain >/dev/null 2>&1; then
+                    pgy_cf_auto_pointing_subdomain
+                else
+                    pgy_message ERROR "Modul Cloudflare API belum dimuat."
+                    press_enter
+                fi
+                ;;
             6)
+                if declare -F pgy_cf_menu >/dev/null 2>&1; then
+                    pgy_cf_menu
+                else
+                    pgy_message ERROR "Modul Cloudflare API belum dimuat."
+                    press_enter
+                fi
+                ;;
+            7)
                 if declare -F cftunnel_management_menu >/dev/null 2>&1; then
                     cftunnel_management_menu
                 else
@@ -43,7 +69,7 @@ domain_cert_menu() {
                     sleep 1
                 fi
                 ;;
-            1)
+            2)
                 local domain_name email
                 echo -e "\n${C_BLUE}[INFO] Before continuing, make sure your domain's A record points to this server's IP.${C_RESET}"
                 echo -e "${C_BLUE}[INFO] Also make sure port 80 is open (certbot needs port 80 for Let's Encrypt validation).${C_RESET}"
@@ -69,7 +95,7 @@ domain_cert_menu() {
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
                 ;;
-            2)
+            3)
                 local common_name
                 local preferred_host
                 preferred_host=$(detect_preferred_host)
@@ -79,17 +105,17 @@ domain_cert_menu() {
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
                 ;;
-            3)
+            4)
                 manage_existing_certbot_certificates
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
                 ;;
-            4)
+            5)
                 import_custom_certificate
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
                 ;;
-            5)
+            8)
                 if [[ -z "$EDGE_DOMAIN" && ! -f "$PGY_SSL_CERT_FILE" ]]; then
                     echo -e "\n${C_YELLOW}[INFO] No certificate to remove.${C_RESET}"
                     read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true

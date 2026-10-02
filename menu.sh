@@ -69,6 +69,8 @@ source "${PGY_MODULE_ROOT}/features/updater.sh"
 # shellcheck source=/dev/null
 [[ -f "${PGY_MODULE_ROOT}/features/api.sh" ]] && source "${PGY_MODULE_ROOT}/features/api.sh"
 # shellcheck source=/dev/null
+[[ -f "${PGY_MODULE_ROOT}/features/cloudflare_api.sh" ]] && source "${PGY_MODULE_ROOT}/features/cloudflare_api.sh"
+# shellcheck source=/dev/null
 [[ -f "${PGY_MODULE_ROOT}/features/cftunnel.sh" ]] && source "${PGY_MODULE_ROOT}/features/cftunnel.sh"
 
 # Load menu controllers

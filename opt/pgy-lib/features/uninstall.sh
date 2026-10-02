@@ -171,6 +171,22 @@ pgy_uninstall_optional_components() {
     if declare -F pgy_cftunnel_uninstall >/dev/null 2>&1; then
         pgy_cftunnel_uninstall >/dev/null 2>&1 || cleanup_failed=true
     fi
+    # Stop and remove Cloudflare Tunnel
+    systemctl stop cloudflared >/dev/null 2>&1 || true
+    systemctl disable cloudflared >/dev/null 2>&1 || true
+    # Stop and remove Xray
+    systemctl stop xray >/dev/null 2>&1 || true
+    systemctl disable xray >/dev/null 2>&1 || true
+    rm -rf /etc/xray /usr/local/bin/xray /etc/systemd/system/xray.service
+    # Stop and remove WARP & Wireproxy
+    systemctl stop wireproxy warp-svc >/dev/null 2>&1 || true
+    systemctl disable wireproxy warp-svc >/dev/null 2>&1 || true
+    rm -rf /etc/wireproxy /etc/systemd/system/wireproxy.service
+    # Stop and remove Adblock / Dnsmasq
+    systemctl stop pgy-adblock >/dev/null 2>&1 || true
+    systemctl disable pgy-adblock >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/pgy-adblock.service /etc/dnsmasq.d/adblock.conf
+    # Stop and remove other VPN methods
     uninstall_zivpn || cleanup_failed=true
     uninstall_dnstt || cleanup_failed=true
     uninstall_badvpn || cleanup_failed=true
@@ -207,9 +223,10 @@ pgy_uninstall_application_files() {
     rm -f "$AUTO_BACKUP_CONF" "$AUTO_BACKUP_SCRIPT" "$AUTO_BACKUP_LOG"
     rm -rf "$AUTO_BACKUP_DIR" "$BADVPN_BUILD_DIR"
     rm -rf "$DB_DIR" "$PGY_LIB_DIR" "$PGY_OPT_LIB_DIR" "/pgy-lib" "$PGY_LICENSE_STATE_DIR"
+    rm -rf "/etc/pgytunnel" "/etc/xray" "/etc/wireproxy"
     rm -f "$WS_SSH_BRIDGE_SCRIPT" "$WS_SSH_BRIDGE_SERVICE"
     rm -f "/etc/systemd/system/pgy-api.service" "/usr/local/bin/pgy_api_service.py" "/usr/local/bin/pgy-speedtest"
-    rm -f "/usr/local/bin/cloudflared" "/etc/pgytunnel/cf_tunnel.conf" "/etc/systemd/system/cloudflared.service"
+    rm -f "/usr/local/bin/cloudflared" "/etc/systemd/system/cloudflared.service"
     rm -f "/usr/local/bin/pgy" "/usr/local/bin/pgy-update" "/usr/local/bin/pgy-license-check"
     for diagnostic in "$PGY_PACKAGE_LOG" "$PGY_CERTIFICATE_LOG" "$PGY_SERVICE_LOG" \
         "${PGY_OVPN_DIAG_LOG:-/var/log/pgy-openvpn-setup.log}"; do
@@ -235,7 +252,7 @@ pgy_verify_uninstall_cleanup() {
         "$WS_SSH_BRIDGE_SERVICE" "$WS_SSH_BRIDGE_SCRIPT" "/etc/systemd/system/pgy-api.service" \
         "$LEGACY_UDP_DIR" "$LEGACY_UDP_SERVICE" "$LEGACY_UDPGW_BINARY" \
         "$LEGACY_UDPGW_SERVICE" "$LEGACY_PROXY_BINARY" "$LEGACY_PROXY_SERVICE" \
-        "$LEGACY_PROXY_CONFIG" \
+        "$LEGACY_PROXY_CONFIG" "/etc/pgytunnel" "/etc/xray" "/etc/wireproxy" \
         /etc/nginx /etc/haproxy
     )
     if [[ -n "${PGY_OVPN_ROOT:-}" ]]; then
@@ -253,7 +270,7 @@ pgy_verify_uninstall_cleanup() {
         [[ -e "$path" || -L "$path" ]] && leftovers+=("$path")
     done
     for unit in pgytunnel-limiter pgytunnel-bandwidth pgy-ws-ssh-bridge pgy-api \
-        badvpn dnstt zivpn haproxy nginx udp-custom udpgw tdzproxy \
+        badvpn dnstt zivpn haproxy nginx udp-custom udpgw tdzproxy cloudflared xray wireproxy \
         pgy-openvpn-network pgy-openvpn-tcp pgy-openvpn-udp pgy-openvpn-http \
         pgy-openvpn-wss pgy-openvpn-ssl pgy-openvpn-portal pgy-openvpn-accounting; do
         if systemctl is-active --quiet "$unit.service" 2>/dev/null; then

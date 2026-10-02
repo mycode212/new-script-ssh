@@ -22,6 +22,12 @@ from pgy_api_service import (
     renew_user_account,
     set_user_lock,
     delete_user_account,
+    load_all_xray_users,
+    find_xray_user,
+    create_xray_account,
+    renew_xray_account,
+    delete_xray_account,
+    generate_xray_links,
     get_system_stats,
     ProgoCloudApiHandler,
 )
@@ -104,6 +110,8 @@ class TestApiDaemon(unittest.TestCase):
         self.bw_dir = self.root / "bandwidth"
         self.cfg_file = self.root / "api_config.conf"
         self.domain_file = self.root / "domain.conf"
+        self.xray_users_file = self.root / "xray_users.json"
+        self.xray_config_file = self.root / "xray_config.json"
 
         self.bw_dir.mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +121,8 @@ class TestApiDaemon(unittest.TestCase):
         os.environ["PGY_BW_DIR"] = str(self.bw_dir)
         os.environ["PGY_API_CONFIG"] = str(self.cfg_file)
         os.environ["PGY_DOMAIN_FILE"] = str(self.domain_file)
+        os.environ["PGY_XRAY_USERS_FILE"] = str(self.xray_users_file)
+        os.environ["PGY_XRAY_CONFIG_FILE"] = str(self.xray_config_file)
         os.environ["PGY_TEST_IP"] = "103.1.2.3"
 
         # Write dummy users.db
@@ -123,6 +133,41 @@ class TestApiDaemon(unittest.TestCase):
             encoding="utf-8"
         )
         self.domain_file.write_text("vpn.arjunacloud.app\n", encoding="utf-8")
+
+        # Write dummy xray users.json
+        self.xray_users_file.write_text(
+            json.dumps([
+                {
+                    "username": "xuser1",
+                    "protocol": "all",
+                    "uuid": "11111111-1111-1111-1111-111111111111",
+                    "exp_ts": int(time.time()) + 86400 * 30,
+                    "quota_gb": 10,
+                    "created_at": int(time.time())
+                },
+                {
+                    "username": "xuser_exp",
+                    "protocol": "vmess",
+                    "uuid": "22222222-2222-2222-2222-222222222222",
+                    "exp_ts": int(time.time()) - 3600,
+                    "quota_gb": 0,
+                    "created_at": int(time.time()) - 86400
+                }
+            ], indent=2),
+            encoding="utf-8"
+        )
+
+        # Write dummy xray config.json
+        self.xray_config_file.write_text(
+            json.dumps({
+                "inbounds": [
+                    {"tag": "vmess-ws-in", "settings": {"clients": []}},
+                    {"tag": "vless-ws-in", "settings": {"clients": []}},
+                    {"tag": "trojan-ws-in", "settings": {"clients": []}}
+                ]
+            }, indent=2),
+            encoding="utf-8"
+        )
 
         # Write config
         self.cfg_file.write_text(
@@ -294,6 +339,97 @@ class TestApiDaemon(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertTrue(data["success"])
 
+    def test_xray_crud_and_links(self):
+        # 1. Load users
+        x_users = load_all_xray_users()
+        self.assertEqual(len(x_users), 2)
+        u1 = find_xray_user("xuser1")
+        self.assertIsNotNone(u1)
+        self.assertEqual(u1["status"], "active")
+        self.assertIn("links", u1)
+        self.assertIn("vmess_ws", u1["links"])
+        self.assertIn("vless_ws", u1["links"])
+        self.assertIn("trojan_ws", u1["links"])
+
+        # 2. Create Xray user
+        ok, msg, data = create_xray_account({
+            "username": "xuser_new",
+            "protocol": "all",
+            "days": 15,
+            "quota_gb": 50,
+        })
+        self.assertTrue(ok)
+        self.assertIsNotNone(data)
+        self.assertEqual(data["username"], "xuser_new")
+        self.assertIn("links", data)
+        self.assertTrue(data["links"]["vmess_ws"].startswith("vmess://"))
+        self.assertTrue(data["links"]["vless_ws"].startswith("vless://"))
+        self.assertTrue(data["links"]["trojan_ws"].startswith("trojan://"))
+
+        # Verify in DB
+        u_new = find_xray_user("xuser_new")
+        self.assertIsNotNone(u_new)
+        self.assertEqual(u_new["status"], "active")
+
+        # 3. Renew Xray user
+        ok, msg, renew_data = renew_xray_account({
+            "username": "xuser_exp",
+            "days": 10,
+        })
+        self.assertTrue(ok)
+        u_renewed = find_xray_user("xuser_exp")
+        self.assertEqual(u_renewed["status"], "active")
+
+        # 4. Delete Xray user
+        ok, msg = delete_xray_account("xuser_new")
+        self.assertTrue(ok)
+        self.assertIsNone(find_xray_user("xuser_new"))
+
+    def test_xray_handler_endpoints(self):
+        api_key = "test_secret_key_12345"
+
+        # 1. GET /api/v1/xray/list
+        code, data, _ = simulate_request("GET", "/api/v1/xray/list", headers={"X-API-Key": api_key})
+        self.assertEqual(code, 200)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["total"], 2)
+
+        # 2. GET /api/v1/xray/info/xuser1
+        code, data, _ = simulate_request("GET", "/api/v1/xray/info/xuser1", headers={"X-API-Key": api_key})
+        self.assertEqual(code, 200)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["data"]["username"], "xuser1")
+        self.assertIn("links", data["data"])
+
+        # 3. POST /api/v1/xray/create
+        body = json.dumps({
+            "username": "apixray1",
+            "protocol": "all",
+            "days": 30,
+            "quota_gb": 20,
+        }).encode("utf-8")
+        code, data, _ = simulate_request("POST", "/api/v1/xray/create", headers={"X-API-Key": api_key, "Content-Type": "application/json"}, body=body)
+        self.assertEqual(code, 200)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["data"]["username"], "apixray1")
+        self.assertIn("vmess_ws", data["data"]["links"])
+
+        # 4. POST /api/v1/xray/renew
+        body = json.dumps({
+            "username": "apixray1",
+            "days": 30,
+        }).encode("utf-8")
+        code, data, _ = simulate_request("POST", "/api/v1/xray/renew", headers={"X-API-Key": api_key, "Content-Type": "application/json"}, body=body)
+        self.assertEqual(code, 200)
+        self.assertTrue(data["success"])
+
+        # 5. POST /api/v1/xray/delete
+        body = json.dumps({"username": "apixray1"}).encode("utf-8")
+        code, data, _ = simulate_request("POST", "/api/v1/xray/delete", headers={"X-API-Key": api_key, "Content-Type": "application/json"}, body=body)
+        self.assertEqual(code, 200)
+        self.assertTrue(data["success"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -134,7 +134,24 @@ pgy_cftunnel_restart() {
 }
 
 pgy_cftunnel_uninstall() {
+    # 1. If Cloudflare API credentials exist, attempt to delete remote DNS CNAMEs & Tunnel on Cloudflare
+    local auth_type auth_val auth_email root_domain vpn_dom api_dom tunnel_id account_id
+    auth_type=$(pgy_cftunnel_get_config_val "CF_AUTH_TYPE" "")
+    auth_val=$(pgy_cftunnel_get_config_val "CF_AUTH_VAL" "")
+    auth_email=$(pgy_cftunnel_get_config_val "CF_AUTH_EMAIL" "")
+    root_domain=$(pgy_cftunnel_get_config_val "CF_TUNNEL_ROOT_DOMAIN" "")
+    vpn_dom=$(pgy_cftunnel_get_config_val "CF_TUNNEL_VPN_DOMAIN" "")
+    api_dom=$(pgy_cftunnel_get_config_val "CF_TUNNEL_API_DOMAIN" "")
+    tunnel_id=$(pgy_cftunnel_get_config_val "CF_TUNNEL_ID" "")
+    account_id=$(pgy_cftunnel_get_config_val "CF_ACCOUNT_ID" "")
+
+    if [[ -n "$auth_val" && -n "$root_domain" ]]; then
+        pgy_cftunnel_cf_api_worker "delete" "$auth_type" "$auth_val" "$auth_email" "$root_domain" "$vpn_dom" "$api_dom" "$tunnel_id" "$account_id" >/dev/null 2>&1 || true
+    fi
+
+    # 2. Stop and uninstall local cloudflared service on VPS
     systemctl stop "$PGY_CFTUNNEL_SERVICE_NAME" >/dev/null 2>&1 || true
+    systemctl disable "$PGY_CFTUNNEL_SERVICE_NAME" >/dev/null 2>&1 || true
     if command -v cloudflared >/dev/null 2>&1; then
         cloudflared service uninstall >/dev/null 2>&1 || true
     elif [[ -x "$PGY_CFTUNNEL_BIN" ]]; then
@@ -176,13 +193,16 @@ def main():
         print(json.dumps({"success": False, "message": "Argumen tidak lengkap"}))
         return
 
-    auth_type = sys.argv[1] # "token" or "global"
-    auth_val = sys.argv[2]  # token string or Global API Key
-    auth_email = sys.argv[3] # email if global, otherwise empty
-    domain = sys.argv[4].strip().lower()
-    vpn_sub = sys.argv[5].strip().lower() if len(sys.argv) > 5 and sys.argv[5] else "vpn"
-    api_sub = sys.argv[6].strip().lower() if len(sys.argv) > 6 and sys.argv[6] else "api"
-    tunnel_name_prefix = sys.argv[7].strip() if len(sys.argv) > 7 and sys.argv[7] else "pgytunnel"
+    action = "create"
+    args = sys.argv[1:]
+    if args[0] in ("create", "delete"):
+        action = args[0]
+        args = args[1:]
+
+    auth_type = args[0] # "token" or "global"
+    auth_val = args[1]  # token string or Global API Key
+    auth_email = args[2] if len(args) > 2 else "" # email if global
+    domain = args[3].strip().lower() if len(args) > 3 else ""
 
     headers = {}
     if auth_type == "token":
@@ -190,6 +210,55 @@ def main():
     else:
         headers["X-Auth-Key"] = auth_val
         headers["X-Auth-Email"] = auth_email
+
+    if action == "delete":
+        vpn_dom = args[4].strip().lower() if len(args) > 4 else ""
+        api_dom = args[5].strip().lower() if len(args) > 5 else ""
+        tunnel_id = args[6].strip() if len(args) > 6 else ""
+        account_id = args[7].strip() if len(args) > 7 else ""
+
+        # 1. Get Zone Info
+        code, res = make_req(f"https://api.cloudflare.com/client/v4/zones?name={domain}", "GET", headers)
+        zone_id = None
+        if res.get("success") and res.get("result"):
+            zone_id = res["result"][0]["id"]
+            if not account_id:
+                account_id = res["result"][0].get("account", {}).get("id")
+
+        # 2. Delete DNS CNAME Records for VPN & API
+        if zone_id:
+            for sub_name in (vpn_dom, api_dom):
+                if not sub_name or sub_name == "belum diatur":
+                    continue
+                code_d, res_d = make_req(f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?name={sub_name}", "GET", headers)
+                if res_d.get("success") and res_d.get("result"):
+                    for rec in res_d["result"]:
+                        rec_id = rec.get("id")
+                        if rec_id:
+                            make_req(f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{rec_id}", "DELETE", headers)
+
+        # 3. Delete Tunnel on Cloudflare
+        if account_id:
+            if not tunnel_id:
+                # Find tunnel by name
+                hostname = socket.gethostname() or "vps"
+                tunnel_name = f"progocloud-{hostname}"[:32]
+                code_f, res_f = make_req(f"https://api.cloudflare.com/client/v4/accounts/{account_id}/tunnels?name={tunnel_name}&is_deleted=false", "GET", headers)
+                if res_f.get("success") and res_f.get("result"):
+                    tunnel_id = res_f["result"][0]["id"]
+
+            if tunnel_id:
+                # Clean connections first then delete
+                make_req(f"https://api.cloudflare.com/client/v4/accounts/{account_id}/tunnels/{tunnel_id}/connections", "DELETE", headers)
+                make_req(f"https://api.cloudflare.com/client/v4/accounts/{account_id}/tunnels/{tunnel_id}", "DELETE", headers)
+
+        print(json.dumps({"success": True, "message": "Tunnel & DNS CNAME berhasil dihapus dari Cloudflare"}))
+        return
+
+    # CREATE ACTION
+    vpn_sub = args[4].strip().lower() if len(args) > 4 and args[4] else "vpn"
+    api_sub = args[5].strip().lower() if len(args) > 5 and args[5] else "api"
+    tunnel_name_prefix = args[6].strip() if len(args) > 6 and args[6] else "pgytunnel"
 
     # 1. Get Zone Info & Account ID
     code, res = make_req(f"https://api.cloudflare.com/client/v4/zones?name={domain}", "GET", headers)
@@ -302,7 +371,8 @@ def main():
         "tunnel_token": tunnel_token,
         "vpn_domain": vpn_full_domain,
         "api_domain": api_full_domain,
-        "account_id": account_id
+        "account_id": account_id,
+        "zone_id": zone_id
     }))
 
 if __name__ == "__main__":

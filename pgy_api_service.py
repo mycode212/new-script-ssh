@@ -19,6 +19,8 @@ import socket
 import subprocess
 import ipaddress
 import urllib.parse
+import base64
+import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from pathlib import Path
@@ -41,6 +43,12 @@ def get_bandwidth_dir() -> Path:
 
 def get_domain_file() -> Path:
     return Path(os.environ.get("PGY_DOMAIN_FILE", "/etc/pgytunnel/domain.conf"))
+
+def get_xray_users_file() -> Path:
+    return Path(os.environ.get("PGY_XRAY_USERS_FILE", "/etc/xray/users.json"))
+
+def get_xray_config_file() -> Path:
+    return Path(os.environ.get("PGY_XRAY_CONFIG_FILE", "/etc/xray/config.json"))
 
 def is_dry_run() -> bool:
     return os.environ.get("PGY_DRY_RUN", "0") == "1"
@@ -567,6 +575,360 @@ def delete_user_account(username: str) -> Tuple[bool, str]:
     return True, f"User '{username}' deleted successfully"
 
 
+# ============================================================
+# Xray Multi-Protocol Account Management
+# ============================================================
+def generate_xray_links(username: str, uuid_str: str, domain: str, proto: str = "all") -> Dict[str, str]:
+    """Generate subscription and client configuration links for Xray."""
+    proto = (proto or "all").lower()
+    links = {}
+
+    # 1. VMess WS link
+    vmess_ws_obj = {
+        "v": "2",
+        "ps": f"ProgoCloud-VMess-{username}",
+        "add": domain,
+        "port": "443",
+        "id": uuid_str,
+        "aid": "0",
+        "net": "ws",
+        "type": "none",
+        "host": domain,
+        "path": "/vmess",
+        "tls": "tls",
+        "sni": domain
+    }
+    vmess_ws_link = "vmess://" + base64.b64encode(json.dumps(vmess_ws_obj).encode("utf-8")).decode("utf-8")
+
+    # VMess gRPC link
+    vmess_grpc_obj = dict(vmess_ws_obj, net="grpc", path="vmess-grpc")
+    vmess_grpc_obj["ps"] = f"ProgoCloud-VMess-gRPC-{username}"
+    vmess_grpc_link = "vmess://" + base64.b64encode(json.dumps(vmess_grpc_obj).encode("utf-8")).decode("utf-8")
+
+    # 2. VLess links
+    vless_ws_link = f"vless://{uuid_str}@{domain}:443?path=%2Fvless&security=tls&encryption=none&type=ws&sni={domain}#ProgoCloud-VLess-{username}"
+    vless_grpc_link = f"vless://{uuid_str}@{domain}:443?mode=gun&security=tls&encryption=none&type=grpc&serviceName=vless-grpc&sni={domain}#ProgoCloud-VLess-gRPC-{username}"
+
+    # 3. Trojan links
+    trojan_ws_link = f"trojan://{uuid_str}@{domain}:443?path=%2Ftrojan&security=tls&type=ws&sni={domain}#ProgoCloud-Trojan-{username}"
+    trojan_grpc_link = f"trojan://{uuid_str}@{domain}:443?mode=gun&security=tls&type=grpc&serviceName=trojan-grpc&sni={domain}#ProgoCloud-Trojan-gRPC-{username}"
+
+    if proto in ("vmess", "all"):
+        links["vmess_ws"] = vmess_ws_link
+        links["vmess_grpc"] = vmess_grpc_link
+    if proto in ("vless", "all"):
+        links["vless_ws"] = vless_ws_link
+        links["vless_grpc"] = vless_grpc_link
+    if proto in ("trojan", "all"):
+        links["trojan_ws"] = trojan_ws_link
+        links["trojan_grpc"] = trojan_grpc_link
+
+    return links
+
+
+def load_all_xray_users() -> List[Dict[str, Any]]:
+    """Load all Xray accounts from users.json."""
+    users_file = get_xray_users_file()
+    if not users_file.is_file():
+        return []
+
+    try:
+        with users_file.open("r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+            if not isinstance(data, list):
+                return []
+    except Exception:
+        return []
+
+    now_ts = int(time.time())
+    users = []
+
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        u = item.get("username", "").strip()
+        if not u:
+            continue
+        exp_ts = int(item.get("exp_ts", 0))
+        created_at = int(item.get("created_at", 0))
+        proto = item.get("protocol", "all").lower()
+        uuid_str = item.get("uuid", "")
+        quota_gb = int(item.get("quota_gb", 0))
+
+        if exp_ts > 0 and exp_ts < now_ts:
+            status = "expired"
+        else:
+            status = "active"
+
+        exp_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(exp_ts)) if exp_ts else "Lifetime"
+
+        users.append({
+            "username": u,
+            "protocol": proto,
+            "uuid": uuid_str,
+            "exp_ts": exp_ts,
+            "expiry": exp_str,
+            "quota_gb": quota_gb,
+            "created_at": created_at,
+            "status": status,
+        })
+    return users
+
+
+def find_xray_user(username: str) -> Optional[Dict[str, Any]]:
+    """Find Xray user details with links."""
+    for u in load_all_xray_users():
+        if u["username"] == username:
+            ip, host = get_public_ip_and_domain()
+            user_data = dict(u)
+            user_data["server_ip"] = ip
+            user_data["server_host"] = host
+            user_data["port"] = 443
+            user_data["tls"] = True
+            user_data["links"] = generate_xray_links(u["username"], u["uuid"], host, u["protocol"])
+            return user_data
+    return None
+
+
+def sync_xray_users_to_config() -> bool:
+    """Synchronize active Xray users from users.json to config.json inbounds."""
+    users_file = get_xray_users_file()
+    conf_file = get_xray_config_file()
+
+    if not conf_file.is_file():
+        return False
+
+    try:
+        with conf_file.open("r", encoding="utf-8", errors="replace") as f:
+            cfg = json.load(f)
+    except Exception:
+        return False
+
+    users = load_all_xray_users()
+    now_ts = int(time.time())
+
+    vmess_clients = []
+    vless_clients = []
+    trojan_clients = []
+
+    for u in users:
+        exp_ts = u.get("exp_ts", 0)
+        if exp_ts > 0 and exp_ts < now_ts:
+            continue
+        uuid_str = u.get("uuid", "")
+        uname = u.get("username", "")
+        proto = u.get("protocol", "all").lower()
+
+        if proto in ("vmess", "all"):
+            vmess_clients.append({"id": uuid_str, "alterId": 0, "email": uname})
+        if proto in ("vless", "all"):
+            vless_clients.append({"id": uuid_str, "email": uname, "flow": ""})
+        if proto in ("trojan", "all"):
+            trojan_clients.append({"password": uuid_str, "email": uname})
+
+    for ib in cfg.get("inbounds", []):
+        tag = ib.get("tag", "")
+        if "vmess" in tag:
+            ib.setdefault("settings", {})["clients"] = vmess_clients
+        elif "vless" in tag:
+            ib.setdefault("settings", {})["clients"] = vless_clients
+        elif "trojan" in tag:
+            ib.setdefault("settings", {})["clients"] = trojan_clients
+
+    try:
+        with conf_file.open("w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        return False
+
+    if not is_dry_run():
+        execute_system_cmd(["systemctl", "restart", "xray.service"])
+    return True
+
+
+def create_xray_account(payload: Dict[str, Any]) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Create a new Xray account (VMess, VLess, Trojan, or All)."""
+    username = str(payload.get("username", "")).strip()
+    proto = str(payload.get("protocol", "all")).strip().lower()
+    days = payload.get("days", 30)
+    quota_gb = payload.get("quota_gb", 0)
+    custom_uuid = str(payload.get("uuid", "")).strip()
+
+    if not SAFE_USERNAME.match(username):
+        return False, "Invalid username format (must be 2-32 chars alphanumeric/_/-)", None
+
+    if proto not in ("all", "vmess", "vless", "trojan"):
+        return False, "Invalid protocol (must be 'all', 'vmess', 'vless', or 'trojan')", None
+
+    try:
+        days = int(days)
+        if days < 1:
+            return False, "Days must be >= 1", None
+    except ValueError:
+        return False, "Days must be a valid integer", None
+
+    try:
+        quota_gb = int(quota_gb)
+        if quota_gb < 0:
+            return False, "Quota must be >= 0", None
+    except ValueError:
+        return False, "Quota must be a valid integer", None
+
+    users_file = get_xray_users_file()
+    users_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Check if exists
+    if find_xray_user(username) is not None:
+        return False, f"Xray user '{username}' already exists", None
+
+    uuid_str = custom_uuid if custom_uuid else str(uuid.uuid4())
+    now_ts = int(time.time())
+    exp_ts = now_ts + (days * 86400)
+
+    # Load existing
+    current_users = []
+    if users_file.is_file():
+        try:
+            with users_file.open("r", encoding="utf-8", errors="replace") as f:
+                current_users = json.load(f)
+                if not isinstance(current_users, list):
+                    current_users = []
+        except Exception:
+            current_users = []
+
+    new_entry = {
+        "username": username,
+        "protocol": proto,
+        "uuid": uuid_str,
+        "exp_ts": exp_ts,
+        "quota_gb": quota_gb,
+        "created_at": now_ts,
+    }
+    current_users.append(new_entry)
+
+    try:
+        with users_file.open("w", encoding="utf-8") as f:
+            json.dump(current_users, f, indent=2)
+    except Exception as e:
+        return False, f"Failed to update Xray database: {e}", None
+
+    sync_xray_users_to_config()
+
+    ip, host = get_public_ip_and_domain()
+    links = generate_xray_links(username, uuid_str, host, proto)
+    exp_display = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(exp_ts))
+
+    result = {
+        "username": username,
+        "protocol": proto,
+        "uuid": uuid_str,
+        "exp_ts": exp_ts,
+        "expiry": exp_display,
+        "quota_gb": quota_gb,
+        "server_ip": ip,
+        "server_host": host,
+        "port": 443,
+        "tls": True,
+        "links": links,
+    }
+    return True, "Xray account created successfully", result
+
+
+def renew_xray_account(payload: Dict[str, Any]) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Renew/extend expiration date for an Xray account."""
+    username = str(payload.get("username", "")).strip()
+    days = payload.get("days", 30)
+
+    if not SAFE_USERNAME.match(username):
+        return False, "Invalid username format", None
+
+    try:
+        days = int(days)
+        if days < 1:
+            return False, "Days must be >= 1", None
+    except ValueError:
+        return False, "Days must be a valid integer", None
+
+    users_file = get_xray_users_file()
+    if not users_file.is_file():
+        return False, f"Xray user '{username}' not found", None
+
+    try:
+        with users_file.open("r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+            if not isinstance(data, list):
+                return False, f"Xray user '{username}' not found", None
+    except Exception:
+        return False, f"Xray user '{username}' not found", None
+
+    found = False
+    now_ts = int(time.time())
+    old_exp = 0
+    new_exp = 0
+
+    for item in data:
+        if item.get("username") == username:
+            found = True
+            old_exp = int(item.get("exp_ts", 0))
+            base = max(old_exp, now_ts)
+            new_exp = base + (days * 86400)
+            item["exp_ts"] = new_exp
+            break
+
+    if not found:
+        return False, f"Xray user '{username}' not found", None
+
+    try:
+        with users_file.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        return False, f"Failed to save Xray database: {e}", None
+
+    sync_xray_users_to_config()
+
+    return True, "Xray account renewed successfully", {
+        "username": username,
+        "old_exp_ts": old_exp,
+        "new_exp_ts": new_exp,
+        "old_expiry": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(old_exp)) if old_exp else "Lifetime",
+        "new_expiry": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(new_exp)),
+        "added_days": days,
+    }
+
+
+def delete_xray_account(username: str) -> Tuple[bool, str]:
+    """Permanently delete an Xray account."""
+    if not SAFE_USERNAME.match(username):
+        return False, "Invalid username format"
+
+    users_file = get_xray_users_file()
+    if not users_file.is_file():
+        return False, f"Xray user '{username}' not found"
+
+    try:
+        with users_file.open("r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+            if not isinstance(data, list):
+                return False, f"Xray user '{username}' not found"
+    except Exception:
+        return False, f"Xray user '{username}' not found"
+
+    original_len = len(data)
+    data = [x for x in data if x.get("username") != username]
+
+    if len(data) == original_len:
+        return False, f"Xray user '{username}' not found"
+
+    try:
+        with users_file.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        return False, f"Failed to update Xray database: {e}"
+
+    sync_xray_users_to_config()
+    return True, f"Xray user '{username}' deleted successfully"
+
+
 def get_system_stats() -> Dict[str, Any]:
     """Retrieve VPS CPU, RAM, Disk, Uptime, and connection stats."""
     uptime_str = "Unknown"
@@ -606,6 +968,11 @@ def get_system_stats() -> Dict[str, Any]:
     locked_users = sum(1 for u in users if u["status"] == "locked")
     expired_users = sum(1 for u in users if u["status"] == "expired")
 
+    xray_users = load_all_xray_users()
+    total_xray = len(xray_users)
+    active_xray = sum(1 for u in xray_users if u["status"] == "active")
+    expired_xray = sum(1 for u in xray_users if u["status"] == "expired")
+
     ip, host = get_public_ip_and_domain()
 
     return {
@@ -622,6 +989,11 @@ def get_system_stats() -> Dict[str, Any]:
             "active": active_users,
             "locked": locked_users,
             "expired": expired_users,
+        },
+        "xray_users": {
+            "total": total_xray,
+            "active": active_xray,
+            "expired": expired_xray,
         },
         "timestamp": int(time.time()),
     }
@@ -706,7 +1078,8 @@ class ProgoCloudApiHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"success": True, "data": stats})
             return
 
-        if path == "/api/v1/user/list":
+        # SSH / OpenVPN User Endpoints
+        if path in ("/api/v1/user/list", "/api/v1/users"):
             users = load_all_users()
             self._send_json(200, {"success": True, "total": len(users), "data": users})
             return
@@ -718,6 +1091,30 @@ class ProgoCloudApiHandler(BaseHTTPRequestHandler):
                 self._send_json(200, {"success": True, "data": user})
             else:
                 self._send_json(404, {"success": False, "message": f"User '{username}' not found"})
+            return
+
+        # Xray Multi-Protocol Endpoints
+        if path in ("/api/v1/xray/list", "/api/v1/xray/user/list", "/api/v1/xray/users"):
+            x_users = load_all_xray_users()
+            self._send_json(200, {"success": True, "total": len(x_users), "data": x_users})
+            return
+
+        if path.startswith("/api/v1/xray/info/"):
+            username = path[len("/api/v1/xray/info/"):].strip()
+            user = find_xray_user(username)
+            if user:
+                self._send_json(200, {"success": True, "data": user})
+            else:
+                self._send_json(404, {"success": False, "message": f"Xray user '{username}' not found"})
+            return
+
+        if path.startswith("/api/v1/xray/user/info/"):
+            username = path[len("/api/v1/xray/user/info/"):].strip()
+            user = find_xray_user(username)
+            if user:
+                self._send_json(200, {"success": True, "data": user})
+            else:
+                self._send_json(404, {"success": False, "message": f"Xray user '{username}' not found"})
             return
 
         self._send_json(404, {"success": False, "message": f"Endpoint GET {path} not found"})
@@ -735,6 +1132,7 @@ class ProgoCloudApiHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"success": False, "message": "Malformed JSON payload or payload too large"})
             return
 
+        # SSH / OpenVPN Endpoints
         if path == "/api/v1/user/create":
             ok, msg, data = create_user_account(body)
             status_code = 200 if ok else 400
@@ -764,6 +1162,26 @@ class ProgoCloudApiHandler(BaseHTTPRequestHandler):
         if path == "/api/v1/user/delete":
             username = str(body.get("username", "")).strip()
             ok, msg = delete_user_account(username)
+            status_code = 200 if ok else 400
+            self._send_json(status_code, {"success": ok, "message": msg})
+            return
+
+        # Xray Multi-Protocol Endpoints
+        if path in ("/api/v1/xray/create", "/api/v1/xray/user/create"):
+            ok, msg, data = create_xray_account(body)
+            status_code = 200 if ok else 400
+            self._send_json(status_code, {"success": ok, "message": msg, "data": data})
+            return
+
+        if path in ("/api/v1/xray/renew", "/api/v1/xray/user/renew"):
+            ok, msg, data = renew_xray_account(body)
+            status_code = 200 if ok else 400
+            self._send_json(status_code, {"success": ok, "message": msg, "data": data})
+            return
+
+        if path in ("/api/v1/xray/delete", "/api/v1/xray/user/delete"):
+            username = str(body.get("username", "")).strip()
+            ok, msg = delete_xray_account(username)
             status_code = 200 if ok else 400
             self._send_json(status_code, {"success": ok, "message": msg})
             return

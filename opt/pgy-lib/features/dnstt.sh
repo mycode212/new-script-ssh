@@ -175,15 +175,42 @@ install_dnstt() {
     local TUNNEL_DOMAIN=""
     local DNSTT_RECORDS_MANAGED="false"
 
-    echo -e "\n${C_BLUE}[INFO] DNSTT requires two DNS records that you must create yourself:${C_RESET}"
-    echo -e "   ${C_CYAN}1.${C_RESET} An NS record pointing a tunnel subdomain to a nameserver subdomain"
-    echo -e "   ${C_CYAN}2.${C_RESET} An A record pointing the nameserver subdomain to this server's IP"
-    echo -e "   ${C_DIM}(The script will not create these for you — set them up at your DNS provider.)${C_RESET}"
-    echo
-    read -p "  Enter your full nameserver domain (e.g., ns1.yourdomain.com): " NS_DOMAIN
-    if [[ -z "$NS_DOMAIN" ]]; then echo -e "\n${C_RED}[ERROR] Nameserver domain cannot be empty. Aborting.${C_RESET}"; return; fi
-    read -p "  Enter your full tunnel domain (e.g., tun.yourdomain.com): " TUNNEL_DOMAIN
-    if [[ -z "$TUNNEL_DOMAIN" ]]; then echo -e "\n${C_RED}[ERROR] Tunnel domain cannot be empty. Aborting.${C_RESET}"; return; fi
+    if declare -F pgy_cf_is_configured >/dev/null 2>&1 && pgy_cf_is_configured; then
+        pgy_cf_load_config
+        echo
+        pgy_box_top "$C_CYAN"
+        pgy_box_header "PENGATURAN DNS SLOWDNS" "$C_CYAN" "$C_CYAN"
+        pgy_box_divider "$C_CYAN"
+        pgy_row "  ${C_GREEN}✔ Kredensial Cloudflare Terdeteksi: ${C_YELLOW}${CF_ZONE_NAME}${C_RESET}" "$C_CYAN"
+        pgy_box_divider "$C_CYAN"
+        pgy_menu1 "[ 1]" "1-Click Otomatis Buat Record di Cloudflare (Rekomendasi)"
+        pgy_menu1 "[ 2]" "Manual Input Subdomain (Set DNS Sendiri)"
+        pgy_box_bot "$C_CYAN"
+        echo
+        local cf_slow_choice
+        read -r -p "$(echo -e "${C_PROMPT}  Pilihan Mode DNS [1]: ${C_RESET}")" cf_slow_choice
+        cf_slow_choice=${cf_slow_choice:-1}
+
+        if [[ "$cf_slow_choice" == "1" ]]; then
+            if pgy_cf_auto_setup_slowdns; then
+                NS_DOMAIN="$CF_SLOWDNS_NS_DOMAIN"
+                TUNNEL_DOMAIN="$CF_SLOWDNS_TUNNEL_DOMAIN"
+                DNSTT_RECORDS_MANAGED="true"
+            fi
+        fi
+    fi
+
+    if [[ -z "$NS_DOMAIN" || -z "$TUNNEL_DOMAIN" ]]; then
+        echo -e "\n${C_BLUE}[INFO] DNSTT requires two DNS records that you must create yourself:${C_RESET}"
+        echo -e "   ${C_CYAN}1.${C_RESET} An NS record pointing a tunnel subdomain to a nameserver subdomain"
+        echo -e "   ${C_CYAN}2.${C_RESET} An A record pointing the nameserver subdomain to this server's IP"
+        echo -e "   ${C_DIM}(The script will not create these for you — set them up at your DNS provider.)${C_RESET}"
+        echo
+        read -p "  Enter your full nameserver domain (e.g., ns1.yourdomain.com): " NS_DOMAIN
+        if [[ -z "$NS_DOMAIN" ]]; then echo -e "\n${C_RED}[ERROR] Nameserver domain cannot be empty. Aborting.${C_RESET}"; return; fi
+        read -p "  Enter your full tunnel domain (e.g., tun.yourdomain.com): " TUNNEL_DOMAIN
+        if [[ -z "$TUNNEL_DOMAIN" ]]; then echo -e "\n${C_RED}[ERROR] Tunnel domain cannot be empty. Aborting.${C_RESET}"; return; fi
+    fi
 
     read -p "  Enter MTU value (e.g., 512, 1200) or press [Enter] for default: " mtu_value
     local mtu_string=""
