@@ -1092,6 +1092,7 @@ apply_edge_public_ports() {
     else
         EDGE_PUBLIC_HTTP_PORT="$new_http"
         EDGE_PUBLIC_TLS_PORT="$new_tls"
+        save_edge_ports_info
         if ! save_edge_port_settings; then
             EDGE_PUBLIC_HTTP_PORT="$old_http"
             EDGE_PUBLIC_TLS_PORT="$old_tls"
@@ -1109,6 +1110,7 @@ apply_edge_public_ports() {
 
 edge_public_port_menu() {
     while true; do
+        load_edge_port_settings
         clear; show_banner
         echo
         pgy_box_top

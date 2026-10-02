@@ -167,9 +167,25 @@ tdz_is_reserved_edge_port() { pgy_is_reserved_edge_port "$@"; }
 
 load_edge_port_settings() {
     local saved_http="" saved_tls=""
-    [[ -r "$EDGE_PORT_SETTINGS_FILE" ]] || return 0
-    saved_http=$(awk -F= '$1 == "EDGE_PUBLIC_HTTP_PORT" {print $2}' "$EDGE_PORT_SETTINGS_FILE" 2>/dev/null | tail -n 1 | tr -d '\r')
-    saved_tls=$(awk -F= '$1 == "EDGE_PUBLIC_TLS_PORT" {print $2}' "$EDGE_PORT_SETTINGS_FILE" 2>/dev/null | tail -n 1 | tr -d '\r')
+
+    # 1. Primary: Load from edge_ports.conf
+    if [[ -r "$EDGE_PORT_SETTINGS_FILE" ]]; then
+        saved_http=$(awk -F= '$1 == "EDGE_PUBLIC_HTTP_PORT" {print $2}' "$EDGE_PORT_SETTINGS_FILE" 2>/dev/null | tail -n 1 | tr -d '\r' | tr -d '"')
+        saved_tls=$(awk -F= '$1 == "EDGE_PUBLIC_TLS_PORT" {print $2}' "$EDGE_PORT_SETTINGS_FILE" 2>/dev/null | tail -n 1 | tr -d '\r' | tr -d '"')
+    fi
+
+    # 2. Fallback: Load from nginx_ports.conf
+    if { [[ -z "$saved_http" ]] || [[ -z "$saved_tls" ]]; } && [[ -r "$NGINX_PORTS_FILE" ]]; then
+        [[ -z "$saved_http" ]] && saved_http=$(awk -F= '$1 == "EDGE_HTTP_PORT" {print $2}' "$NGINX_PORTS_FILE" 2>/dev/null | tail -n 1 | tr -d '\r' | tr -d '"')
+        [[ -z "$saved_tls" ]] && saved_tls=$(awk -F= '$1 == "EDGE_TLS_PORT" {print $2}' "$NGINX_PORTS_FILE" 2>/dev/null | tail -n 1 | tr -d '\r' | tr -d '"')
+    fi
+
+    # 3. Fallback: Inspect HAProxy config bind ports if available
+    if { [[ -z "$saved_http" ]] || [[ -z "$saved_tls" ]]; } && [[ -r "${HAPROXY_CONFIG:-/etc/haproxy/haproxy.cfg}" ]]; then
+        local hp_cfg="${HAPROXY_CONFIG:-/etc/haproxy/haproxy.cfg}"
+        [[ -z "$saved_http" ]] && saved_http=$(awk '/frontend port_80_edge/,/frontend/ { if ($1 == "bind") { split($2, a, ":"); print a[2] } }' "$hp_cfg" 2>/dev/null | head -n 1)
+        [[ -z "$saved_tls" ]] && saved_tls=$(awk '/frontend port_443_edge/,/frontend/ { if ($1 == "bind") { split($2, a, ":"); print a[2] } }' "$hp_cfg" 2>/dev/null | head -n 1)
+    fi
 
     if pgy_is_valid_port_number "$saved_http" &&
        pgy_is_valid_port_number "$saved_tls" &&
@@ -188,3 +204,7 @@ save_edge_port_settings() {
         echo "EDGE_PUBLIC_TLS_PORT=$EDGE_PUBLIC_TLS_PORT"
     } > "$EDGE_PORT_SETTINGS_FILE"
 }
+
+# Auto-load saved public ports upon initialization
+load_edge_port_settings
+
