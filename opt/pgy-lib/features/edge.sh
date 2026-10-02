@@ -732,7 +732,7 @@ server {
         proxy_socket_keepalive on;
         tcp_nodelay on;
         tcp_nopush off;
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:${WS_SSH_BRIDGE_PORT:-8890};
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
