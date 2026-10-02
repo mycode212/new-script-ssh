@@ -15,9 +15,14 @@
 <p align="center">
   <a href="https://github.com/mycode212/new-script-ssh/stargazers"><img src="https://img.shields.io/github/stars/mycode212/new-script-ssh?style=social" alt="Stars"></a>
   <a href="https://github.com/mycode212/new-script-ssh/releases"><img src="https://img.shields.io/badge/Release-Stable-brightgreen" alt="Release"></a>
+  <a href="INSTALL.md"><img src="https://img.shields.io/badge/Installation_Guide-INSTALL.md-blueviolet?style=flat-square&logo=gitbook" alt="Installation Guide"></a>
   <a href="https://t.me/progocloud"><img src="https://img.shields.io/badge/Telegram-@progocloud-2CA5E0?style=flat-square&logo=telegram" alt="Telegram"></a>
   <a href="https://autoscript-license-3xj.pages.dev"><img src="https://img.shields.io/badge/License_Portal-ProgoCloud-00d4ff?style=flat-square" alt="License Portal"></a>
 </p>
+
+---
+
+> 🚀 **Panduan Instalasi Cepat**: Lihat petunjuk langkah demi langkah lengkap dari VPS baru hingga siap pakai di [**`INSTALL.md`**](INSTALL.md).
 
 ---
 
