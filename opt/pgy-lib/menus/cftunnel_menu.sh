@@ -35,53 +35,114 @@ cftunnel_management_menu() {
         pgy_row "${C_GRAY}API DOMAIN :${C_RESET} ${C_YELLOW}${api_domain}${C_RESET} ${C_GRAY}-> localhost:8780${C_RESET}"
         pgy_row "${C_GRAY}TOKEN      :${C_RESET} ${C_WHITE}${masked_token}${C_RESET}"
         pgy_box_divider
-        pgy_menu1 "[ 1]" "Toggle Service Cloudflare Tunnel (Start / Stop / Restart)"
-        pgy_menu1 "[ 2]" "Hubungkan Token Baru (Install Cloudflare Tunnel Service)"
-        pgy_menu1 "[ 3]" "Atur Domain Tunnel (OpenVPN Portal & REST API)"
-        pgy_menu1 "[ 4]" "Panduan Routing Hostname di Cloudflare Zero Trust"
-        pgy_menu1 "[ 5]" "Lihat Log Layanan Cloudflare Tunnel"
-        pgy_menu1 "[ 6]" "Hapus Service & Uninstall cloudflared"
+        pgy_menu1 "[ 1]" "Otomatis Buat Tunnel & Domain (Cloudflare API 1-Click)"
+        pgy_menu1 "[ 2]" "Hubungkan Token Manual (Tempel Token Zero Trust)"
+        pgy_menu1 "[ 3]" "Toggle Service Cloudflare Tunnel (Start / Stop / Restart)"
+        pgy_menu1 "[ 4]" "Atur Domain Tunnel Manual (OpenVPN Portal & REST API)"
+        pgy_menu1 "[ 5]" "Panduan Routing Hostname di Cloudflare Zero Trust"
+        pgy_menu1 "[ 6]" "Lihat Log Layanan Cloudflare Tunnel"
+        pgy_menu1 "[ 7]" "Hapus Service & Uninstall cloudflared"
         pgy_box_divider
         pgy_menu1 "[ 0]" "Kembali ke Menu Sebelumnya"
         pgy_box_bot
         echo
-        if ! read -r -p "$(echo -e "${C_PROMPT}  Pilih opsi [0-6]: ${C_RESET}")" choice; then
+        if ! read -r -p "$(echo -e "${C_PROMPT}  Pilih opsi [0-7]: ${C_RESET}")" choice; then
             echo
             return
         fi
 
         case $choice in
             1)
+                clear; show_banner
+                pgy_screen_title "OTOMATISASI CLOUDFLARE TUNNEL & DOMAIN" "Membuat Tunnel, Ingress Rules, & DNS CNAME secara otomatis via Cloudflare API"
                 echo
-                if [[ "$s_status" == "active" ]]; then
-                    pgy_progress_begin 1 2 "Menghentikan service cloudflared"
-                    pgy_cftunnel_stop
-                    pgy_progress_done
-                    pgy_progress_begin 2 2 "Memperbarui konfigurasi sistem"
-                    sleep 0.4
+                echo -e "  ${C_CYAN}Pilih Metode Autentikasi Cloudflare:${C_RESET}"
+                echo -e "  ${C_WHITE}1. API Token${C_RESET} ${C_GRAY}(Direkomendasikan: Izin Zone.DNS + Account.Cloudflare Tunnel)${C_RESET}"
+                echo -e "  ${C_WHITE}2. Global API Key + Email${C_RESET}"
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Pilih metode [1/2]: ${C_RESET}")" auth_mode_choice
+                local cf_auth_type="token" cf_auth_val="" cf_auth_email=""
+                if [[ "$auth_mode_choice" == "2" ]]; then
+                    cf_auth_type="global"
+                    read -r -p "$(echo -e "${C_PROMPT}  Masukkan Email Akun Cloudflare: ${C_RESET}")" cf_auth_email
+                    read -r -p "$(echo -e "${C_PROMPT}  Masukkan Global API Key: ${C_RESET}")" cf_auth_val
+                else
+                    cf_auth_type="token"
+                    read -r -p "$(echo -e "${C_PROMPT}  Masukkan Cloudflare API Token: ${C_RESET}")" cf_auth_val
+                fi
+
+                if [[ -z "$cf_auth_val" ]]; then
+                    pgy_message ERROR "API Token / Key tidak boleh kosong."
+                    echo
+                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                    continue
+                fi
+
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Masukkan Domain Utama (contoh: arjunacloud.app): ${C_RESET}")" in_domain
+                if [[ -z "$in_domain" ]]; then
+                    pgy_message ERROR "Domain utama tidak boleh kosong."
+                    echo
+                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                    continue
+                fi
+
+                read -r -p "$(echo -e "${C_PROMPT}  Prefix Subdomain OpenVPN [default: vpn]: ${C_RESET}")" in_vpn_sub
+                in_vpn_sub=${in_vpn_sub:-vpn}
+                read -r -p "$(echo -e "${C_PROMPT}  Prefix Subdomain REST API [default: api]: ${C_RESET}")" in_api_sub
+                in_api_sub=${in_api_sub:-api}
+
+                echo
+                pgy_progress_begin 1 4 "Memeriksa domain & akun di Cloudflare"
+                local worker_res
+                worker_res=$(pgy_cftunnel_cf_api_worker "$cf_auth_type" "$cf_auth_val" "$cf_auth_email" "$in_domain" "$in_vpn_sub" "$in_api_sub" "progocloud")
+                
+                local is_success
+                is_success=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print("true" if d.get("success") else "false")' 2>/dev/null || echo "false")
+
+                if [[ "$is_success" != "true" ]]; then
+                    pgy_progress_failed
+                    local err_msg
+                    err_msg=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("message", "Gagal berkomunikasi dengan Cloudflare API"))' 2>/dev/null || echo "Gagal menghubungi Cloudflare API.")
+                    pgy_message ERROR "$err_msg"
+                    echo
+                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                    continue
+                fi
+                pgy_progress_done
+
+                pgy_progress_begin 2 4 "Membuat Tunnel & Routing Ingress"
+                sleep 0.5
+                pgy_progress_done
+
+                pgy_progress_begin 3 4 "Menerapkan DNS Record CNAME otomatis"
+                sleep 0.5
+                pgy_progress_done
+
+                pgy_progress_begin 4 4 "Memasang & menjalankan service cloudflared di VPS"
+                local out_token out_vpn_dom out_api_dom
+                out_token=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("tunnel_token", ""))')
+                out_vpn_dom=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("vpn_domain", ""))')
+                out_api_dom=$(echo "$worker_res" | python3 -c 'import sys, json; d=json.loads(sys.stdin.read()); print(d.get("api_domain", ""))')
+
+                if ! pgy_cftunnel_install_service_token "$out_token"; then
+                    pgy_progress_failed
+                    pgy_message ERROR "Gagal menjalankan service cloudflared di VPS."
+                else
+                    pgy_cftunnel_set_config_val "CF_TUNNEL_VPN_DOMAIN" "$out_vpn_dom"
+                    pgy_cftunnel_set_config_val "CF_TUNNEL_API_DOMAIN" "$out_api_dom"
                     pgy_progress_done
                     echo
-                    pgy_message OK "Cloudflare Tunnel berhasil dihentikan."
-                else
-                    pgy_progress_begin 1 2 "Memverifikasi binary cloudflared"
-                    if ! pgy_cftunnel_ensure_binary; then
-                        pgy_progress_failed
-                        pgy_message ERROR "Gagal memuat binary cloudflared."
-                    else
-                        pgy_progress_done
-                        pgy_progress_begin 2 2 "Menjalankan cloudflared.service"
-                        pgy_cftunnel_start
-                        pgy_progress_done
-                        echo
-                        pgy_message OK "Cloudflare Tunnel berhasil dijalankan."
-                    fi
+                    pgy_message OK "Cloudflare Tunnel & DNS berhasil dibuat secara otomatis!"
+                    echo -e "   • OpenVPN Web Portal : ${C_GREEN}https://${out_vpn_dom}/openvpn/${C_RESET}"
+                    echo -e "   • REST API Daemon    : ${C_YELLOW}https://${out_api_dom}/api/v1/system/status${C_RESET}"
                 fi
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             2)
                 clear; show_banner
-                pgy_screen_title "INSTALL CLOUDFLARE TUNNEL" "Tempel Connector Token dari Dashboard Cloudflare Zero Trust"
+                pgy_screen_title "INSTALL CLOUDFLARE TUNNEL (MANUAL)" "Tempel Connector Token dari Dashboard Cloudflare Zero Trust"
                 echo
                 echo -e "  ${C_CYAN}Cara Mendapatkan Token:${C_RESET}"
                 echo -e "  1. Buka ${C_YELLOW}https://one.dash.cloudflare.com${C_RESET}"
@@ -119,8 +180,36 @@ cftunnel_management_menu() {
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             3)
+                echo
+                if [[ "$s_status" == "active" ]]; then
+                    pgy_progress_begin 1 2 "Menghentikan service cloudflared"
+                    pgy_cftunnel_stop
+                    pgy_progress_done
+                    pgy_progress_begin 2 2 "Memperbarui konfigurasi sistem"
+                    sleep 0.4
+                    pgy_progress_done
+                    echo
+                    pgy_message OK "Cloudflare Tunnel berhasil dihentikan."
+                else
+                    pgy_progress_begin 1 2 "Memverifikasi binary cloudflared"
+                    if ! pgy_cftunnel_ensure_binary; then
+                        pgy_progress_failed
+                        pgy_message ERROR "Gagal memuat binary cloudflared."
+                    else
+                        pgy_progress_done
+                        pgy_progress_begin 2 2 "Menjalankan cloudflared.service"
+                        pgy_cftunnel_start
+                        pgy_progress_done
+                        echo
+                        pgy_message OK "Cloudflare Tunnel berhasil dijalankan."
+                    fi
+                fi
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
+                ;;
+            4)
                 clear; show_banner
-                pgy_screen_title "KONFIGURASI DOMAIN TUNNEL" "Menghubungkan domain publik tunnel ke layanan lokal VPS"
+                pgy_screen_title "KONFIGURASI DOMAIN TUNNEL MANUAL" "Menghubungkan domain publik tunnel ke layanan lokal VPS"
                 echo
                 echo -e "  ${C_GRAY}Domain Tunnel OpenVPN Portal saat ini : ${C_CYAN}${vpn_domain}${C_RESET}"
                 read -r -p "$(echo -e "${C_PROMPT}  Masukkan Subdomain OpenVPN (misal: vpn.arjunacloud.app): ${C_RESET}")" in_vpn_domain
@@ -136,7 +225,7 @@ cftunnel_management_menu() {
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
-            4)
+            5)
                 clear; show_banner
                 pgy_screen_title "PANDUAN ZERO TRUST PUBLIC HOSTNAME" "Petunjuk setting Public Hostname di Dashboard Cloudflare"
                 echo
@@ -160,7 +249,7 @@ cftunnel_management_menu() {
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
-            5)
+            6)
                 clear; show_banner
                 pgy_screen_title "LOG CLOUDFLARE TUNNEL" "50 baris log terakhir cloudflared.service"
                 echo
@@ -172,7 +261,7 @@ cftunnel_management_menu() {
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
-            6)
+            7)
                 echo
                 read -r -p "$(echo -e "${C_PROMPT}  Yakin ingin menghapus Cloudflare Tunnel dari VPS? [y/N]: ${C_RESET}")" confirm_un
                 if [[ "$confirm_un" == "y" || "$confirm_un" == "Y" ]]; then

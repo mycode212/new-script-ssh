@@ -127,8 +127,8 @@ Sebelum menggunakan dan mengonfigurasi layanan di VPS Anda, perhatikan poin-poin
 - **Untuk Portal OpenVPN (Port 1180):**
   - Cloudflare CDN gratisan tidak mendukung port non-standar `:1180`.
   - **Solusi Rekomendasi:**
-    - **Opsi 1 (Cloudflare Tunnel - Terbaik):** Pasang `cloudflared` dan hubungkan subdomain (misal `vpn.domain.com`) ke `http://localhost:1180`. Portal dapat diakses via `https://vpn.domain.com` secara full-proxy tanpa port.
-    - **Opsi 2 (2 Subdomain):** Gunakan subdomain kedua berstatus **DNS Only (Awan Abu-abu)** khusus untuk membuka `https://subdomain:1180/openvpn/`, atau buka langsung via IP VPS `https://IP_VPS:1180/openvpn/`.
+    - **Opsi 1 (Cloudflare Tunnel - Terbaik & Otomatis):** Gunakan menu `[ 7] Domain & SSL` → `[ 6] Cloudflare Tunnel` → **[ 1] Otomatis Buat Tunnel & Domain (Cloudflare API 1-Click)**. Script akan otomatis membuat Tunnel, Ingress Routing (`localhost:1180` & `localhost:8780`), serta DNS CNAME di akun Cloudflare Anda.
+    - **Opsi 2 (2 Subdomain DNS Only):** Gunakan subdomain berstatus **DNS Only (Awan Abu-abu)** khusus untuk membuka `https://subdomain:1180/openvpn/`, atau buka langsung via IP VPS `https://IP_VPS:1180/openvpn/`.
 
 ### 2. Pengaturan Port Edge (HAProxy)
 - Secara default, Edge HTTP/TLS berada di port `2080` & `442`. Jika Anda ingin menggunakan port standar `80` & `443` untuk WebSocket/CDN:
