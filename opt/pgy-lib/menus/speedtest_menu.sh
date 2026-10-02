@@ -43,3 +43,8 @@ speedtest_benchmark_menu() {
         esac
     done
 }
+
+speedtest_menu() {
+    speedtest_benchmark_menu "$@"
+}
+

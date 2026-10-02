@@ -235,7 +235,7 @@ main_menu() {
             12) pgy_run_action cleanup_expired ;;
             13) pgy_run_action update_script ;;
             14) pgy_run_action pgy_license_show_status ;;
-            15) speedtest_menu ;;
+            15) speedtest_benchmark_menu ;;
             16) api_management_menu ;;
 
             99) uninstall_script ;;
