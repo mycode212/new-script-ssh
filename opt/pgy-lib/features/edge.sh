@@ -810,7 +810,6 @@ frontend port_443_edge
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
     acl is_tls req.ssl_hello_type 1
-    acl has_web_alpn req.ssl_alpn -m sub h2 http/1.1
 
     tcp-request content accept if is_ssh
     tcp-request content accept if HTTP
@@ -818,25 +817,31 @@ frontend port_443_edge
 
     use_backend direct_ssh if is_ssh
     use_backend nginx_cleartext if HTTP
-    use_backend nginx_tls if is_tls has_web_alpn
     default_backend loopback_ssl_terminator
 
 # ====================================================================
-# TIER 2: INTERNAL DECRYPTOR (Only for Any-SNI SSH-TLS)
-# After TLS is stripped, the inner stream may be:
+# TIER 2: INTERNAL DECRYPTOR (Unified SSL Terminator for Xray & SSH)
+# Strips TLS and routes decrypted stream:
 #   - Raw SSH banner -> direct_ssh
-#   - HTTP WS upgrade payload (GET wss://... Upgrade: websocket) -> pgy_ws_ssh_bridge
+#   - Xray WS / gRPC paths (/vmess, /vless, /trojan, etc.) -> nginx_cleartext
+#   - All HTTP WS payloads (Standard, Split payload, Bug SNI, GET-RAY) -> pgy_ws_ssh_bridge
 # ====================================================================
 frontend internal_decryptor
-    bind 127.0.0.1:${HAPROXY_INTERNAL_DECRYPT_PORT} ssl crt ${PGY_SSL_CERT_FILE}
+    bind 127.0.0.1:${HAPROXY_INTERNAL_DECRYPT_PORT} ssl crt ${PGY_SSL_CERT_FILE} alpn h2,http/1.1
     mode tcp
     tcp-request inspect-delay 500ms
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
+    acl is_v2ray payload(0,64) -m sub /vmess || payload(0,64) -m sub /vless || payload(0,64) -m sub /trojan
+    acl is_grpc payload(0,64) -m sub -grpc
+
     tcp-request content accept if is_ssh
+    tcp-request content accept if is_v2ray
+    tcp-request content accept if is_grpc
     tcp-request content accept if HTTP
 
     use_backend direct_ssh if is_ssh
+    use_backend nginx_cleartext if is_v2ray || is_grpc
     default_backend pgy_ws_ssh_bridge
 
 # ====================================================================
