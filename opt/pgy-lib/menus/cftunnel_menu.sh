@@ -5,6 +5,8 @@
 # ============================================================
 
 cftunnel_management_menu() {
+    local PGY_ACTION_PAUSE_GUARD="" TDZ_ACTION_PAUSE_GUARD=""
+    local PGY_ACTION_PAUSED="false" TDZ_ACTION_PAUSED="false"
     pgy_cftunnel_init_config
     while true; do
         show_banner
@@ -74,7 +76,8 @@ cftunnel_management_menu() {
                         pgy_message OK "Cloudflare Tunnel berhasil dijalankan."
                     fi
                 fi
-                press_enter
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             2)
                 clear; show_banner
@@ -112,7 +115,8 @@ cftunnel_management_menu() {
                         fi
                     fi
                 fi
-                press_enter
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             3)
                 clear; show_banner
@@ -129,7 +133,8 @@ cftunnel_management_menu() {
 
                 echo
                 pgy_message OK "Domain tunnel berhasil disimpan."
-                press_enter
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             4)
                 clear; show_banner
@@ -153,15 +158,19 @@ cftunnel_management_menu() {
                 pgy_row "✔ Mengatasi blokir port non-standar pada Cloudflare CDN" "$C_CYAN"
                 pgy_box_bot "$C_CYAN"
                 echo
-                press_enter
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             5)
                 clear; show_banner
                 pgy_screen_title "LOG CLOUDFLARE TUNNEL" "50 baris log terakhir cloudflared.service"
                 echo
-                journalctl -u cloudflared.service -n 50 --no-pager 2>/dev/null || echo -e "  ${C_WARN}Log tidak tersedia atau service belum berjalan.${C_RESET}"
+                if command -v journalctl >/dev/null 2>&1; then
+                    journalctl -u cloudflared.service -n 50 --no-pager 2>/dev/null || echo -e "  ${C_YELLOW}Log tidak tersedia atau service belum berjalan.${C_RESET}"
+                else
+                    echo -e "  ${C_YELLOW}Perintah journalctl tidak tersedia di sistem ini.${C_RESET}"
+                fi
                 echo
-                press_enter
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             6)
                 echo
@@ -179,7 +188,8 @@ cftunnel_management_menu() {
                 else
                     pgy_message CANCELLED "Operasi dibatalkan."
                 fi
-                press_enter
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali ke menu... ${C_RESET}")" || true
                 ;;
             0)
                 return

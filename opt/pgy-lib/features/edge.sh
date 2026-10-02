@@ -5,95 +5,118 @@
 # ============================================================
 
 domain_cert_menu() {
-    clear; show_banner
-    load_edge_cert_info
+    local PGY_ACTION_PAUSE_GUARD="" TDZ_ACTION_PAUSE_GUARD=""
+    local PGY_ACTION_PAUSED="false" TDZ_ACTION_PAUSED="false"
+    while true; do
+        clear; show_banner
+        load_edge_cert_info
 
-    local cert_domain="${EDGE_DOMAIN:-Not configured}"
-    local cert_mode="${EDGE_CERT_MODE:-None}"
-    echo
-    pgy_box_top
-    pgy_box_header "DOMAIN & SSL"
-    pgy_box_divider
-    pgy_kv2 "DOMAIN" "$cert_domain" "MODE" "$cert_mode"
-    if [[ -n "$EDGE_EMAIL" ]]; then
-        pgy_row "${C_GRAY}EMAIL${C_RESET} ${C_WHITE}$EDGE_EMAIL${C_RESET}"
-    fi
-    pgy_box_divider
-    pgy_menu1 "[ 1]" "Issue / Renew Let's Encrypt"
-    pgy_menu1 "[ 2]" "Generate Self-Signed Certificate"
-    pgy_menu1 "[ 3]" "Use / Renew Existing Certificate"
-    pgy_menu1 "[ 4]" "Import Fullchain and Private Key"
-    pgy_menu1 "[ 5]" "Remove Current Certificate"
-    pgy_menu1 "[ 6]" "Cloudflare Tunnel (Zero Trust HTTPS)"
-    pgy_box_divider
-    pgy_menu1 "[ 0]" "Return"
-    pgy_box_bot
-    echo
-    read -r -p "$(echo -e "${C_PROMPT}  Select an option: ${C_RESET}")" dc_choice
+        local cert_domain="${EDGE_DOMAIN:-Not configured}"
+        local cert_mode="${EDGE_CERT_MODE:-None}"
+        echo
+        pgy_box_top
+        pgy_box_header "DOMAIN & SSL"
+        pgy_box_divider
+        pgy_kv2 "DOMAIN" "$cert_domain" "MODE" "$cert_mode"
+        if [[ -n "$EDGE_EMAIL" ]]; then
+            pgy_row "${C_GRAY}EMAIL${C_RESET} ${C_WHITE}$EDGE_EMAIL${C_RESET}"
+        fi
+        pgy_box_divider
+        pgy_menu1 "[ 1]" "Issue / Renew Let's Encrypt"
+        pgy_menu1 "[ 2]" "Generate Self-Signed Certificate"
+        pgy_menu1 "[ 3]" "Use / Renew Existing Certificate"
+        pgy_menu1 "[ 4]" "Import Fullchain and Private Key"
+        pgy_menu1 "[ 5]" "Remove Current Certificate"
+        pgy_menu1 "[ 6]" "Cloudflare Tunnel (Zero Trust HTTPS)"
+        pgy_box_divider
+        pgy_menu1 "[ 0]" "Return"
+        pgy_box_bot
+        echo
+        read -r -p "$(echo -e "${C_PROMPT}  Select an option: ${C_RESET}")" dc_choice
 
-    case "$dc_choice" in
-        6)
-            if declare -F cftunnel_management_menu >/dev/null 2>&1; then
-                cftunnel_management_menu
-            else
-                echo -e "\n${C_RED}[ERROR] Modul Cloudflare Tunnel belum dimuat.${C_RESET}"
-                sleep 1
-            fi
-            ;;
-        1)
-            local domain_name email
-            echo -e "\n${C_BLUE}[INFO] Before continuing, make sure your domain's A record points to this server's IP.${C_RESET}"
-            echo -e "${C_BLUE}[INFO] Also make sure port 80 is open (certbot needs port 80 for Let's Encrypt validation).${C_RESET}"
-            echo
-            read -p "  Enter your domain (e.g. vpn.example.com): " domain_name
-            if [[ -z "$domain_name" ]]; then
-                echo -e "\n${C_RED}[ERROR] Domain cannot be empty.${C_RESET}"
-                return 1
-            fi
-            if _is_valid_ipv4 "$domain_name"; then
-                echo -e "\n${C_RED}[ERROR] Certbot requires a real domain name, not a raw IP.${C_RESET}"
-                return 1
-            fi
-            read -p "  Enter your email for Let's Encrypt: " email
-            if [[ -z "$email" ]]; then
-                echo -e "\n${C_RED}[ERROR] Email cannot be empty.${C_RESET}"
-                return 1
-            fi
-            obtain_certbot_edge_cert "$domain_name" "$email"
-            ;;
-        2)
-            local common_name
-            local preferred_host
-            preferred_host=$(detect_preferred_host)
-            read -p "  Enter certificate Common Name [$preferred_host]: " common_name
-            common_name=${common_name:-$preferred_host}
-            generate_self_signed_edge_cert "$common_name"
-            ;;
-        3)
-            manage_existing_certbot_certificates
-            ;;
-        4)
-            import_custom_certificate
-            ;;
-        5)
-            if [[ -z "$EDGE_DOMAIN" && ! -f "$PGY_SSL_CERT_FILE" ]]; then
-                echo -e "\n${C_YELLOW}[INFO] No certificate to remove.${C_RESET}"
-                return
-            fi
-            read -p "  Confirm removal? (y/n): " confirm
-            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                rm -f "$PGY_SSL_CERT_FILE" "$SSL_CERT_CHAIN_FILE" "$SSL_CERT_KEY_FILE" "$EDGE_CERT_INFO_FILE"
-                echo -e "\n${C_GREEN}[OK] Certificate removed.${C_RESET}"
-                if declare -F pgy_openvpn_refresh_gateway_tls >/dev/null 2>&1 && pgy_openvpn_is_installed; then
-                    pgy_openvpn_refresh_gateway_tls >/dev/null 2>&1 || true
+        case "$dc_choice" in
+            6)
+                if declare -F cftunnel_management_menu >/dev/null 2>&1; then
+                    cftunnel_management_menu
+                else
+                    echo -e "\n${C_RED}[ERROR] Modul Cloudflare Tunnel belum dimuat.${C_RESET}"
+                    sleep 1
                 fi
-            else
-                pgy_message CANCELLED "Certificate removal cancelled."
-            fi
-            ;;
-        0|"") return ;;
-        *) echo -e "\n${C_RED}[ERROR] Invalid option.${C_RESET}" && sleep 1 ;;
-    esac
+                ;;
+            1)
+                local domain_name email
+                echo -e "\n${C_BLUE}[INFO] Before continuing, make sure your domain's A record points to this server's IP.${C_RESET}"
+                echo -e "${C_BLUE}[INFO] Also make sure port 80 is open (certbot needs port 80 for Let's Encrypt validation).${C_RESET}"
+                echo
+                read -p "  Enter your domain (e.g. vpn.example.com): " domain_name
+                if [[ -z "$domain_name" ]]; then
+                    echo -e "\n${C_RED}[ERROR] Domain cannot be empty.${C_RESET}"
+                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                    continue
+                fi
+                if _is_valid_ipv4 "$domain_name"; then
+                    echo -e "\n${C_RED}[ERROR] Certbot requires a real domain name, not a raw IP.${C_RESET}"
+                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                    continue
+                fi
+                read -p "  Enter your email for Let's Encrypt: " email
+                if [[ -z "$email" ]]; then
+                    echo -e "\n${C_RED}[ERROR] Email cannot be empty.${C_RESET}"
+                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                    continue
+                fi
+                obtain_certbot_edge_cert "$domain_name" "$email"
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                ;;
+            2)
+                local common_name
+                local preferred_host
+                preferred_host=$(detect_preferred_host)
+                read -p "  Enter certificate Common Name [$preferred_host]: " common_name
+                common_name=${common_name:-$preferred_host}
+                generate_self_signed_edge_cert "$common_name"
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                ;;
+            3)
+                manage_existing_certbot_certificates
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                ;;
+            4)
+                import_custom_certificate
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                ;;
+            5)
+                if [[ -z "$EDGE_DOMAIN" && ! -f "$PGY_SSL_CERT_FILE" ]]; then
+                    echo -e "\n${C_YELLOW}[INFO] No certificate to remove.${C_RESET}"
+                    read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                    continue
+                fi
+                read -p "  Confirm removal? (y/n): " confirm
+                if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                    rm -f "$PGY_SSL_CERT_FILE" "$SSL_CERT_CHAIN_FILE" "$SSL_CERT_KEY_FILE" "$EDGE_CERT_INFO_FILE"
+                    echo -e "\n${C_GREEN}[OK] Certificate removed.${C_RESET}"
+                    if declare -F pgy_openvpn_refresh_gateway_tls >/dev/null 2>&1 && pgy_openvpn_is_installed; then
+                        pgy_openvpn_refresh_gateway_tls >/dev/null 2>&1 || true
+                    fi
+                else
+                    pgy_message CANCELLED "Certificate removal cancelled."
+                fi
+                echo
+                read -r -p "$(echo -e "${C_PROMPT}  Tekan [Enter] untuk kembali... ${C_RESET}")" || true
+                ;;
+            0|"")
+                return 0
+                ;;
+            *)
+                echo -e "\n${C_RED}[ERROR] Invalid option.${C_RESET}"
+                sleep 1
+                ;;
+        esac
+    done
 }
 
 

@@ -227,7 +227,7 @@ main_menu() {
             5) adblock_management_menu ;;
             6) traffic_monitor_menu ;;
 
-            7) pgy_run_action domain_cert_menu ;;
+            7) domain_cert_menu ;;
             8) ssh_banner_menu ;;
             9) auto_reboot_menu ;;
             10) backup_data_menu ;;

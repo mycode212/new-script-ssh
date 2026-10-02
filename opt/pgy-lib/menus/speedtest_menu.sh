@@ -5,6 +5,8 @@
 # ============================================================
 
 speedtest_benchmark_menu() {
+    local PGY_ACTION_PAUSE_GUARD="" TDZ_ACTION_PAUSE_GUARD=""
+    local PGY_ACTION_PAUSED="false" TDZ_ACTION_PAUSED="false"
     local isp_info ip isp country
     isp_info=$(pgy_speedtest_get_isp_info 2>/dev/null || echo "127.0.0.1|Local|Indonesia")
     IFS='|' read -r ip isp country <<< "$isp_info"

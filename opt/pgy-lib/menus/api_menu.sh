@@ -5,6 +5,8 @@
 # ============================================================
 
 api_management_menu() {
+    local PGY_ACTION_PAUSE_GUARD="" TDZ_ACTION_PAUSE_GUARD=""
+    local PGY_ACTION_PAUSED="false" TDZ_ACTION_PAUSED="false"
     pgy_api_init_config
     while true; do
         show_banner
