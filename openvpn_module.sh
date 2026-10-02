@@ -2321,7 +2321,7 @@ pgy_openvpn_uninstall() {
     else
         pgy_openvpn_progress_done
     fi
-    pgy_box_close_if_open
+    declare -F pgy_box_close_if_open >/dev/null 2>&1 && pgy_box_close_if_open 2>/dev/null || true
     if [[ "$cleanup_failed" == true ]]; then
         [[ "$mode" == "silent" ]] || { echo; pgy_message ERROR "OpenVPN cleanup requires attention."; }
         return 1
@@ -2331,21 +2331,162 @@ pgy_openvpn_uninstall() {
 }
 
 pgy_openvpn_regenerate_profiles_action() {
-    if pgy_openvpn_load_state && pgy_openvpn_generate_profiles &&
-       pgy_openvpn_apply_private_permissions && systemctl restart pgy-openvpn-portal >/dev/null 2>&1; then
-        echo -e "${C_GREEN}[OK] Download profiles regenerated.${C_RESET}"
-        pgy_openvpn_show_details
-    else
+    pgy_openvpn_is_installed || {
         echo -e "${C_RED}[ERROR] OpenVPN must be installed first.${C_RESET}"
+        return 1
+    }
+    pgy_openvpn_load_state || {
+        echo -e "${C_RED}[ERROR] Saved OpenVPN settings are invalid. Run OpenVPN repair first.${C_RESET}"
+        return 1
+    }
+
+    declare -F pgy_box_close_if_open >/dev/null 2>&1 && pgy_box_close_if_open 2>/dev/null || true
+    echo
+    echo -e "  ${C_CYAN}▶ REGENERATING DOWNLOAD PROFILES${C_RESET}"
+
+    local failed=false
+    pgy_openvpn_progress_begin 1 3 "Validating PKI certificates"
+    if pgy_openvpn_ensure_pki; then
+        pgy_openvpn_progress_done
+    else
+        pgy_openvpn_progress_failed
+        failed=true
+    fi
+
+    if ! $failed; then
+        pgy_openvpn_progress_begin 2 3 "Generating client profiles (.ovpn)"
+        if pgy_openvpn_generate_profiles && pgy_openvpn_apply_private_permissions; then
+            pgy_openvpn_progress_done
+        else
+            pgy_openvpn_progress_failed
+            failed=true
+        fi
+    fi
+
+    if ! $failed; then
+        pgy_openvpn_progress_begin 3 3 "Restarting download portal service"
+        if systemctl restart pgy-openvpn-portal >/dev/null 2>&1; then
+            pgy_openvpn_progress_done
+        else
+            pgy_openvpn_progress_failed
+            failed=true
+        fi
+    fi
+
+    if ! $failed; then
+        echo
+        echo -e "${C_GREEN}[OK] Download profiles regenerated successfully.${C_RESET}"
+        pgy_openvpn_show_details
+        return 0
+    else
+        echo
+        echo -e "${C_RED}[ERROR] Failed to regenerate download profiles.${C_RESET}"
         return 1
     fi
 }
 
 pgy_openvpn_restart_action() {
-    if pgy_openvpn_restart; then
-        echo -e "${C_GREEN}[OK] All OpenVPN services are active.${C_RESET}"
+    pgy_openvpn_is_installed || {
+        echo -e "${C_RED}[ERROR] OpenVPN must be installed first.${C_RESET}"
+        return 1
+    }
+    pgy_openvpn_load_state || {
+        echo -e "${C_RED}[ERROR] Saved OpenVPN settings are invalid. Run OpenVPN repair first.${C_RESET}"
+        return 1
+    }
+
+    declare -F pgy_box_close_if_open >/dev/null 2>&1 && pgy_box_close_if_open 2>/dev/null || true
+    echo
+    echo -e "  ${C_CYAN}▶ RESTARTING OPENVPN SERVICES${C_RESET}"
+
+    local failed=false
+    pgy_openvpn_progress_begin 1 4 "Stopping OpenVPN services"
+    pgy_openvpn_stop_services
+    pgy_openvpn_progress_done
+
+    pgy_openvpn_progress_begin 2 4 "Validating configuration & runtime files"
+    if pgy_openvpn_validate_runtime_files; then
+        pgy_openvpn_progress_done
     else
-        echo -e "${C_RED}[ERROR] Service verification failed. Check the system journal.${C_RESET}"
+        pgy_openvpn_progress_failed
+        failed=true
+    fi
+
+    if ! $failed; then
+        pgy_openvpn_progress_begin 3 4 "Starting systemd daemon services"
+        systemctl daemon-reload >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+        systemctl enable pgy-openvpn-network.service >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+        systemctl restart pgy-openvpn-network.service >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+        local unit
+        for unit in pgy-openvpn-tcp pgy-openvpn-udp pgy-openvpn-http pgy-openvpn-wss \
+            pgy-openvpn-ssl pgy-openvpn-portal pgy-openvpn-accounting; do
+            systemctl enable "$unit.service" >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+            systemctl restart "$unit.service" >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+        done
+        pgy_openvpn_progress_done
+    fi
+
+    if ! $failed; then
+        pgy_openvpn_progress_begin 4 4 "Verifying service status and ports"
+        local attempt all_active=false
+        for ((attempt=0; attempt<15; attempt++)); do
+            all_active=true
+            for unit in pgy-openvpn-network pgy-openvpn-tcp pgy-openvpn-udp pgy-openvpn-http pgy-openvpn-wss \
+                pgy-openvpn-ssl pgy-openvpn-portal pgy-openvpn-accounting; do
+                systemctl is-active --quiet "$unit.service" || all_active=false
+            done
+            if $all_active &&
+               pgy_openvpn_port_listening "$PGY_OVPN_TCP_PORT" tcp &&
+               pgy_openvpn_port_listening "$PGY_OVPN_UDP_PORT" udp &&
+               pgy_openvpn_port_listening "$PGY_OVPN_HTTP_PORT" tcp &&
+               pgy_openvpn_port_listening "$PGY_OVPN_WSS_PORT" tcp &&
+               pgy_openvpn_port_listening "$PGY_OVPN_SSL_PORT" tcp &&
+               pgy_openvpn_port_listening "$PGY_OVPN_PORTAL_PORT" tcp; then
+                break
+            fi
+            sleep 1
+        done
+
+        if $all_active &&
+           pgy_openvpn_port_listening "$PGY_OVPN_TCP_PORT" tcp &&
+           pgy_openvpn_port_listening "$PGY_OVPN_UDP_PORT" udp &&
+           pgy_openvpn_port_listening "$PGY_OVPN_HTTP_PORT" tcp &&
+           pgy_openvpn_port_listening "$PGY_OVPN_WSS_PORT" tcp &&
+           pgy_openvpn_port_listening "$PGY_OVPN_SSL_PORT" tcp &&
+           pgy_openvpn_port_listening "$PGY_OVPN_PORTAL_PORT" tcp; then
+            pgy_openvpn_progress_done
+            echo
+            echo -e "${C_GREEN}[OK] All OpenVPN services are active and verified.${C_RESET}"
+            return 0
+        else
+            pgy_openvpn_progress_failed
+            failed=true
+        fi
+    fi
+
+    if $failed; then
+        echo
+        echo -e "${C_RED}[ERROR] OpenVPN service verification failed.${C_RESET}"
+        local inactive_units=() missing_ports=()
+        for unit in pgy-openvpn-network pgy-openvpn-tcp pgy-openvpn-udp pgy-openvpn-http pgy-openvpn-wss \
+            pgy-openvpn-ssl pgy-openvpn-portal pgy-openvpn-accounting; do
+            if ! systemctl is-active --quiet "$unit.service" 2>/dev/null; then
+                inactive_units+=("$unit")
+            fi
+        done
+        [[ ${#inactive_units[@]} -gt 0 ]] && echo -e "  ${C_YELLOW}Inactive services:${C_RESET} ${inactive_units[*]}"
+
+        pgy_openvpn_port_listening "$PGY_OVPN_TCP_PORT" tcp || missing_ports+=("TCP:$PGY_OVPN_TCP_PORT")
+        pgy_openvpn_port_listening "$PGY_OVPN_UDP_PORT" udp || missing_ports+=("UDP:$PGY_OVPN_UDP_PORT")
+        pgy_openvpn_port_listening "$PGY_OVPN_HTTP_PORT" tcp || missing_ports+=("HTTP:$PGY_OVPN_HTTP_PORT")
+        pgy_openvpn_port_listening "$PGY_OVPN_WSS_PORT" tcp || missing_ports+=("WSS:$PGY_OVPN_WSS_PORT")
+        pgy_openvpn_port_listening "$PGY_OVPN_SSL_PORT" tcp || missing_ports+=("SSL:$PGY_OVPN_SSL_PORT")
+        pgy_openvpn_port_listening "$PGY_OVPN_PORTAL_PORT" tcp || missing_ports+=("Portal:$PGY_OVPN_PORTAL_PORT")
+        [[ ${#missing_ports[@]} -gt 0 ]] && echo -e "  ${C_YELLOW}Unreachable ports:${C_RESET} ${missing_ports[*]}"
+
+        if [[ -f "$PGY_OVPN_DIAG_LOG" ]]; then
+            echo -e "  ${C_DIM}Log file: $PGY_OVPN_DIAG_LOG${C_RESET}"
+        fi
         return 1
     fi
 }
