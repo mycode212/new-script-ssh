@@ -31,6 +31,7 @@ TARGET_PGY="/usr/local/bin/pgy"
 TARGET_UPDATE="/usr/local/bin/pgy-update"
 TARGET_LICENSE_CHECK="/usr/local/bin/pgy-license-check"
 TARGET_BRIDGE="/usr/local/bin/pgy-ws-ssh-bridge.py"
+TARGET_API="/usr/local/bin/pgy_api_service.py"
 TARGET_LIB_DIR="/usr/local/lib/pgy-ssh-tunnel"
 TARGET_OPT_LIB_DIR="/pgy-lib/opt"
 DATA_DIR="/etc/pgytunnel"
@@ -495,7 +496,11 @@ install_core() {
         install -m 755 "${SOURCE_REPO_DIR}/pgy_ws_ssh_bridge.py" "$TARGET_BRIDGE"
     fi
 
-    for item in openvpn_module.sh pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_ssh_auth_session.py pgy_openvpn_runtime.py pgy_ws_ssh_bridge.py; do
+    if [[ -f "${SOURCE_REPO_DIR}/pgy_api_service.py" ]]; then
+        install -m 755 "${SOURCE_REPO_DIR}/pgy_api_service.py" "$TARGET_API"
+    fi
+
+    for item in openvpn_module.sh pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_ssh_auth_session.py pgy_openvpn_runtime.py pgy_ws_ssh_bridge.py pgy_api_service.py; do
         if [[ -f "${SOURCE_REPO_DIR}/${item}" ]]; then
             install -m 755 "${SOURCE_REPO_DIR}/${item}" "${TARGET_LIB_DIR}/${item}"
             install -m 755 "${SOURCE_REPO_DIR}/${item}" "${TARGET_OPT_LIB_DIR}/${item}"

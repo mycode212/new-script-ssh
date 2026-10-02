@@ -205,6 +205,7 @@ pgy_uninstall_application_files() {
     rm -rf "$AUTO_BACKUP_DIR" "$BADVPN_BUILD_DIR"
     rm -rf "$DB_DIR" "$PGY_LIB_DIR" "$PGY_OPT_LIB_DIR" "/pgy-lib" "$PGY_LICENSE_STATE_DIR"
     rm -f "$WS_SSH_BRIDGE_SCRIPT" "$WS_SSH_BRIDGE_SERVICE"
+    rm -f "/etc/systemd/system/pgy-api.service" "/usr/local/bin/pgy_api_service.py" "/usr/local/bin/pgy-speedtest"
     rm -f "/usr/local/bin/pgy" "/usr/local/bin/pgy-update" "/usr/local/bin/pgy-license-check"
     for diagnostic in "$PGY_PACKAGE_LOG" "$PGY_CERTIFICATE_LOG" "$PGY_SERVICE_LOG" \
         "${PGY_OVPN_DIAG_LOG:-/var/log/pgy-openvpn-setup.log}"; do
@@ -227,7 +228,7 @@ pgy_verify_uninstall_cleanup() {
         "$AUTO_BACKUP_CONF" "$AUTO_BACKUP_SCRIPT" "$AUTO_BACKUP_LOG" "$AUTO_BACKUP_DIR" \
         "$BADVPN_SERVICE_FILE" "$BADVPN_BUILD_DIR" "$DNSTT_SERVICE_FILE" "$DNSTT_BINARY" \
         "$DNSTT_KEYS_DIR" "$ZIVPN_SERVICE_FILE" "$ZIVPN_BIN" "$ZIVPN_DIR" \
-        "$WS_SSH_BRIDGE_SERVICE" "$WS_SSH_BRIDGE_SCRIPT" \
+        "$WS_SSH_BRIDGE_SERVICE" "$WS_SSH_BRIDGE_SCRIPT" "/etc/systemd/system/pgy-api.service" \
         "$LEGACY_UDP_DIR" "$LEGACY_UDP_SERVICE" "$LEGACY_UDPGW_BINARY" \
         "$LEGACY_UDPGW_SERVICE" "$LEGACY_PROXY_BINARY" "$LEGACY_PROXY_SERVICE" \
         "$LEGACY_PROXY_CONFIG" \
@@ -247,7 +248,7 @@ pgy_verify_uninstall_cleanup() {
     for path in "${managed_paths[@]}"; do
         [[ -e "$path" || -L "$path" ]] && leftovers+=("$path")
     done
-    for unit in pgytunnel-limiter pgytunnel-bandwidth pgy-ws-ssh-bridge \
+    for unit in pgytunnel-limiter pgytunnel-bandwidth pgy-ws-ssh-bridge pgy-api \
         badvpn dnstt zivpn haproxy nginx udp-custom udpgw tdzproxy \
         pgy-openvpn-network pgy-openvpn-tcp pgy-openvpn-udp pgy-openvpn-http \
         pgy-openvpn-wss pgy-openvpn-ssl pgy-openvpn-portal pgy-openvpn-accounting; do

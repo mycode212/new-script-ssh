@@ -178,7 +178,7 @@ update_script() {
     fi
 
     # Copy Python helper scripts and standalone modules
-    for py_script in pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_openvpn_runtime.py pgy_ssh_auth_session.py pgy_ws_ssh_bridge.py openvpn_module.sh; do
+    for py_script in pgy_openvpn_gateway.py pgy_openvpn_portal.py pgy_openvpn_runtime.py pgy_ssh_auth_session.py pgy_ws_ssh_bridge.py pgy_api_service.py openvpn_module.sh; do
         if [[ -f "${src_dir}/${py_script}" ]]; then
             cp -a "${src_dir}/${py_script}" "${PGY_LIB_DIR}/${py_script}" 2>/dev/null || true
             cp -a "${src_dir}/${py_script}" "/pgy-lib/opt/${py_script}" 2>/dev/null || true
@@ -188,6 +188,10 @@ update_script() {
             chmod 755 "${PGY_LIB_DIR}/${py_script}" "/pgy-lib/opt/${py_script}" 2>/dev/null || true
         fi
     done
+
+    if [[ -f "${src_dir}/pgy_api_service.py" ]]; then
+        install -m 755 "${src_dir}/pgy_api_service.py" /usr/local/bin/pgy_api_service.py 2>/dev/null || true
+    fi
 
     # Update binaries
     if [[ -f "${src_dir}/menu.sh" ]]; then
@@ -223,6 +227,7 @@ EOF
     # Restart core tunnel services if running to apply changes
     systemctl is-active --quiet pgytunnel-limiter 2>/dev/null && systemctl restart pgytunnel-limiter >/dev/null 2>&1 || true
     systemctl is-active --quiet pgy-ws-ssh-bridge 2>/dev/null && systemctl restart pgy-ws-ssh-bridge >/dev/null 2>&1 || true
+    systemctl is-active --quiet pgy-api 2>/dev/null && systemctl restart pgy-api >/dev/null 2>&1 || true
     systemctl is-active --quiet haproxy 2>/dev/null && systemctl restart haproxy >/dev/null 2>&1 || true
     systemctl is-active --quiet nginx 2>/dev/null && systemctl restart nginx >/dev/null 2>&1 || true
 

@@ -198,10 +198,11 @@ main_menu() {
         pgy_box_top
         pgy_box_header "SYSTEM & MAINTENANCE"
         pgy_box_divider
-        pgy_menu2 "[ 7]" "Domain & SSL Cert" "[11]" "Restore Data"
-        pgy_menu2 "[ 8]" "SSH Banner"        "[12]" "Cleanup Expired"
-        pgy_menu2 "[ 9]" "Auto-Reboot Task"  "[13]" "Update Script"
-        pgy_menu2 "[10]" "Backup Data"       "[14]" "Status Lisensi"
+        pgy_menu2 "[ 7]" "Domain & SSL Cert"   "[11]" "Restore Data"
+        pgy_menu2 "[ 8]" "SSH Banner"          "[12]" "Cleanup Expired"
+        pgy_menu2 "[ 9]" "Auto-Reboot Task"    "[13]" "Update Script"
+        pgy_menu2 "[10]" "Backup Data"         "[14]" "Status Lisensi"
+        pgy_menu2 "[15]" "Speedtest Benchmark" "[16]" "REST API Manager"
         pgy_box_bot
 
         # ── SECTION 6: DANGER ZONE (red) ──────────────────────────────
@@ -213,7 +214,7 @@ main_menu() {
         pgy_box_bot "$C_DANGER"
 
         echo
-        if ! read -r -p "$(echo -e ${C_PROMPT}"  Pilih opsi [0-14/99]: "${C_RESET})" choice; then
+        if ! read -r -p "$(echo -e ${C_PROMPT}"  Pilih opsi [0-16/99]: "${C_RESET})" choice; then
             echo
             exit 0
         fi
@@ -234,6 +235,8 @@ main_menu() {
             12) pgy_run_action cleanup_expired ;;
             13) pgy_run_action update_script ;;
             14) pgy_run_action pgy_license_show_status ;;
+            15) speedtest_menu ;;
+            16) api_management_menu ;;
 
             99) uninstall_script ;;
             0) exit 0 ;;

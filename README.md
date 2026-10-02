@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/ProgoCloud-SSH--SCRIPT-00d4ff?style=for-the-badge&logo=linux&logoColor=black" alt="Auto Script SSH By : ProgoCloud">
-  <img src="https://img.shields.io/badge/Version-0.1.50-green?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.1.51-green?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/Platform-Linux-blue?style=for-the-badge&logo=linux" alt="Platform">
   <img src="https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white" alt="Bash">
 </p>
@@ -23,7 +23,7 @@
 
 ## 📖 Ringkasan (Overview)
 
-**Auto Script SSH By : ProgoCloud** adalah sistem manajemen VPN, SSH tunneling, dan proxy gateway serba guna yang dirancang khusus untuk server Linux VPS (Debian / Ubuntu). Script ini menghadirkan antarmuka CLI terminal interaktif modern berkinerja tinggi, dilengkapi sistem manajemen akun multi-protokol, pembatas kuota bandwidth & multi-login presisi, integrasi Cloudflare CDN & WARP, serta auto-healing pada sertifikat dan layanan sistem.
+**Auto Script SSH By : ProgoCloud** adalah sistem manajemen VPN, SSH tunneling, dan proxy gateway serba guna yang dirancang khusus untuk server Linux VPS (Debian / Ubuntu). Script ini menghadirkan antarmuka CLI terminal interaktif modern berkinerja tinggi, dilengkapi sistem manajemen akun multi-protokol, pembatas kuota bandwidth & multi-login presisi, integrasi Cloudflare CDN & WARP, pengujian kecepatan (Ookla Speedtest & Game Ping Diagnostic), REST API Daemon mandiri untuk integrasi bot/web reseller, serta auto-healing pada sertifikat dan layanan sistem.
 
 Arsitektur sistem dibangun secara modular di bawah `/pgy-lib/opt/` (`opt/pgy-lib/`), menjamin kestabilan tinggi, pembaruan aplikasi *atomic* tanpa merusak konfigurasi aktif (*zero downtime updates*), dan keamanan data pengguna yang terisolasi.
 
@@ -68,7 +68,18 @@ Arsitektur sistem dibangun secara modular di bawah `/pgy-lib/opt/` (`opt/pgy-lib
 - **BadVPN / UDPGW** — Port UDP `7300` teroptimasi untuk stabilitas game online dan panggilan suara (VoIP/WhatsApp).
 - **ZiVPN UDP** — Port direct UDP `5667` dan forwarding range `6000–19999`.
 
-### 6. Keamanan, Lisensi, & Backup
+### 6. Speedtest & Network Benchmark (Fitur Baru v0.1.51)
+- **Official Ookla Speedtest CLI** — Pengujian bandwidth download, upload, ping, dan jitter riil dengan binary resmi Ookla Linux (x86_64 / arm64).
+- **Multi-Region Benchmark** — Uji latensi dan kecepatan terarah ke server Indonesia, Singapura, Malaysia, Jepang, dan Amerika Serikat.
+- **Game Server Diagnostic** — Pengecekan latensi & jitter khusus untuk Mobile Legends (MLBB), PUBG Mobile, Valorant / Riot Games, dan Free Fire (Garena).
+- **Continuous Ping & Packet Loss Monitor** — Pemantauan stabilitas jaringan real-time.
+
+### 7. ProgoCloud REST API Daemon (Fitur Baru v0.1.51)
+- **Micro Python 3 Daemon** — Layanan REST API ringan port `8780` (<15MB RAM) tanpa dependensi library eksternal.
+- **Keamanan Kriptografis** — Autentikasi token `X-API-Key` 32-karakter, IP Whitelisting ACL, dan Rate Limiter 60 req/menit.
+- **Otomatisasi Reseller & Billing Bot** — Endpoint JSON lengkap untuk pembuatan akun instan, perpanjangan masa aktif (*renew*), kunci/buka user, hapus user, cek profil akun, dan status resource VPS real-time.
+
+### 8. Keamanan, Lisensi, & Backup
 - **ProgoCloud License Guard** — Validasi otomatis IP publik VPS ke server lisensi resmi ProgoCloud.
 - **Domain & SSL Certificate Manager** — Penerbitan sertifikat SSL otomatis via Let's Encrypt (Certbot), sertifikat custom, atau self-signed.
 - **Cloud Backup to Telegram** — Pencadangan database akun terenkripsi yang langsung dikirimkan ke Bot Telegram pribadi Anda.
@@ -89,6 +100,7 @@ Arsitektur sistem dibangun secara modular di bawah `/pgy-lib/opt/` (`opt/pgy-lib
 | `449` | TCP / HTTP | OpenVPN HTTP Proxy & WebSocket Method |
 | `450` | TCP / TLS | OpenVPN WSS / SNI Method |
 | `1180` | HTTP / HTTPS | OpenVPN Web Documentation & Profile Portal |
+| `8780` | TCP / HTTP | ProgoCloud REST API & Webhook Daemon |
 | `7300` | UDP | BadVPN / UDPGW (Gaming & VoIP) |
 | `53` | UDP | SlowDNS / DNSTT Server |
 | `5667` | UDP | ZiVPN Server Direct |
