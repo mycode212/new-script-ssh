@@ -724,6 +724,15 @@ server {
         grpc_pass grpc://127.0.0.1:10007;
     }
 
+    location /openvpn {
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:${PGY_OVPN_PORTAL_PORT:-1180};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    }
+
     location / {
         proxy_read_timeout 3600s;
         proxy_buffering off;
@@ -835,6 +844,7 @@ frontend internal_decryptor
     acl is_v2ray payload(0,64) -m sub /vmess
     acl is_v2ray payload(0,64) -m sub /vless
     acl is_v2ray payload(0,64) -m sub /trojan
+    acl is_v2ray payload(0,64) -m sub /openvpn
     acl is_grpc payload(0,64) -m sub grpc
 
     tcp-request content accept if is_ssh
