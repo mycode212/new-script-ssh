@@ -194,7 +194,7 @@ pgy_openvpn_valid_telegram_username() {
 pgy_openvpn_forbidden_port() {
     local port=${1:-} reserved
     case "$port" in
-        22|53|5300|7300) return 0 ;;
+        22|53|80|442|443|1080|1180|2053|2080|2086|2096|2288|2289|5300|5667|7300|8080|8443|8880|8888|8770|8771|8890|10443) return 0 ;;
         *) ;;
     esac
     for reserved in "${EDGE_PUBLIC_HTTP_PORT:-}" "${EDGE_PUBLIC_TLS_PORT:-}" \
@@ -2011,15 +2011,24 @@ pgy_openvpn_apply_port_layout() {
         return 1
     }
 
-    backup=$(mktemp -d /tmp/pgy-openvpn-ports.XXXXXX) || return 1
+    pgy_box_close_if_open 2>/dev/null || true
+    echo
+    echo -e "  ${C_CYAN}▶ APPLYING OPENVPN PORTS${C_RESET}"
+    pgy_progress_begin 1 4 "Preparing snapshot & stopping services"
+    backup=$(mktemp -d /tmp/pgy-openvpn-ports.XXXXXX) || {
+        pgy_progress_failed
+        return 1
+    }
     if ! pgy_openvpn_snapshot_runtime "$backup"; then
+        pgy_progress_failed
         rm -rf "$backup"
         echo -e "${C_RED}[ERROR] Could not create the rollback snapshot.${C_RESET}"
         return 1
     fi
-
-    echo -e "${C_BLUE}[INFO] Rebuilding OpenVPN listeners, firewall rules, profiles, and portal...${C_RESET}"
     pgy_openvpn_stop_services
+    pgy_progress_done
+
+    pgy_progress_begin 2 4 "Configuring ports & generating certificates"
     PGY_OVPN_PORTAL_PORT="$requested_portal"
     PGY_OVPN_SSL_PORT="$requested_ssl"
     PGY_OVPN_TCP_PORT="$requested_tcp"
@@ -2033,14 +2042,37 @@ pgy_openvpn_apply_port_layout() {
     $failed || pgy_openvpn_write_hooks || failed=true
     $failed || pgy_openvpn_prepare_gateway_certificate || failed=true
     $failed || pgy_openvpn_write_pam || failed=true
-    $failed || pgy_openvpn_write_server_config tcp tcp-server "$PGY_OVPN_TCP_PORT" "$PGY_OVPN_TCP_SUBNET" "$pam_plugin" || failed=true
-    $failed || pgy_openvpn_write_server_config udp udp "$PGY_OVPN_UDP_PORT" "$PGY_OVPN_UDP_SUBNET" "$pam_plugin" || failed=true
-    $failed || pgy_openvpn_generate_profiles || failed=true
-    $failed || pgy_openvpn_apply_private_permissions || failed=true
-    $failed || pgy_openvpn_write_network_service || failed=true
-    $failed || pgy_openvpn_write_systemd_units || failed=true
-    $failed || pgy_openvpn_validate_runtime_files || failed=true
-    $failed || pgy_openvpn_start_services || failed=true
+    if $failed; then
+        pgy_progress_failed
+    else
+        pgy_progress_done
+    fi
+
+    if ! $failed; then
+        pgy_progress_begin 3 4 "Writing server configurations & profiles"
+        pgy_openvpn_write_server_config tcp tcp-server "$PGY_OVPN_TCP_PORT" "$PGY_OVPN_TCP_SUBNET" "$pam_plugin" || failed=true
+        $failed || pgy_openvpn_write_server_config udp udp "$PGY_OVPN_UDP_PORT" "$PGY_OVPN_UDP_SUBNET" "$pam_plugin" || failed=true
+        $failed || pgy_openvpn_generate_profiles || failed=true
+        $failed || pgy_openvpn_apply_private_permissions || failed=true
+        $failed || pgy_openvpn_write_network_service || failed=true
+        $failed || pgy_openvpn_write_systemd_units || failed=true
+        $failed || pgy_openvpn_validate_runtime_files || failed=true
+        if $failed; then
+            pgy_progress_failed
+        else
+            pgy_progress_done
+        fi
+    fi
+
+    if ! $failed; then
+        pgy_progress_begin 4 4 "Starting and verifying OpenVPN services"
+        pgy_openvpn_start_services || failed=true
+        if $failed; then
+            pgy_progress_failed
+        else
+            pgy_progress_done
+        fi
+    fi
 
     if $failed; then
         echo -e "${C_RED}[ERROR] The new ports could not be activated; restoring the previous working layout.${C_RESET}"
@@ -2053,7 +2085,7 @@ pgy_openvpn_apply_port_layout() {
     fi
 
     rm -rf "$backup"
-    echo -e "${C_GREEN}[OK] Every OpenVPN port, service, firewall rule, profile, and portal page was updated.${C_RESET}"
+    echo -e "\n  ${C_GREEN}[OK] Every OpenVPN port, service, firewall rule, profile, and portal page was updated.${C_RESET}\n"
     pgy_openvpn_show_details
 }
 
@@ -2081,10 +2113,9 @@ pgy_openvpn_configure_ports() {
         echo -e "${C_RED}[ERROR] Saved OpenVPN settings are invalid. Run OpenVPN repair first.${C_RESET}"
         return 1
     }
+    pgy_box_close_if_open 2>/dev/null || true
     echo
-    if declare -F pgy_section >/dev/null 2>&1; then
-        pgy_section "CHANGE OPENVPN PORTS"
-    fi
+    echo -e "  ${C_CYAN}▶ CHANGE OPENVPN PORTS${C_RESET}"
     echo -e "${C_DIM}Press Enter to keep a current value. All six ports must be unique.${C_RESET}"
 
     pgy_openvpn_prompt_port "Download Portal" "$PGY_OVPN_PORTAL_PORT" || return 1
@@ -2163,10 +2194,9 @@ pgy_openvpn_configure_support_contact() {
         return 1
     }
     current="$PGY_OVPN_SUPPORT_USERNAME"
+    pgy_box_close_if_open 2>/dev/null || true
     echo
-    if declare -F pgy_section >/dev/null 2>&1; then
-        pgy_section "CONTACT USERNAME"
-    fi
+    echo -e "  ${C_CYAN}▶ CONTACT USERNAME${C_RESET}"
     echo -e "${C_DIM}This contact username is shown for account requests and support on every portal page.${C_RESET}"
     if ! read -r -p "$(echo -e "${C_PROMPT}  Contact username [@${current}]: ${C_RESET}")" input; then
         return 1
@@ -2218,9 +2248,10 @@ pgy_openvpn_uninstall() {
         }
     fi
 
-    if [[ "$mode" != "silent" ]] && declare -F pgy_section >/dev/null 2>&1; then
+    if [[ "$mode" != "silent" ]]; then
+        pgy_box_close_if_open 2>/dev/null || true
         echo
-        pgy_section "UNINSTALLATION PROGRESS"
+        echo -e "  ${C_CYAN}▶ UNINSTALLATION PROGRESS${C_RESET}"
     fi
 
     pgy_openvpn_progress_begin 1 4 "Stopping services"

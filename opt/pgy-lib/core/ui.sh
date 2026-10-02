@@ -389,20 +389,14 @@ pgy_progress_begin() {
         PGY_PROGRESS_PID=""
     fi
 
+    # Close any open box cleanly so progress is displayed borderless & tidy
+    pgy_box_close_if_open
+
     local display_text="$label"
     if [[ -n "$step_num" && -n "$total_steps" ]]; then
         display_text="[${step_num}/${total_steps}] ${label}"
     fi
     PGY_PROGRESS_LABEL="$display_text"
-
-    # If no box open, open one
-    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" != "true" ]]; then
-        echo
-        pgy_box_top "$C_CYAN"
-        pgy_box_header "PROGRESS" "$C_CYAN"
-        pgy_box_divider "$C_CYAN"
-        PGY_CURRENT_BOX_OPEN=true
-    fi
 
     if [[ -t 1 ]]; then
         printf '\033[?25l' 2>/dev/null || true
@@ -410,19 +404,14 @@ pgy_progress_begin() {
             local index=0
             local -a spinners=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
             while true; do
-                local pad_len=$(( PGY_BOX_WIDTH - ${#display_text} - 12 ))
-                (( pad_len < 0 )) && pad_len=0
-                local pad_sp=""
-                (( pad_len > 0 )) && printf -v pad_sp "%${pad_len}s" ""
-                printf '\r\033[2K  %s║%s  \033[38;2;0;212;255m%s\033[0m %s...%s %s║%s' \
-                    "$C_CYAN" "$C_RESET" "${spinners[$index]}" "${display_text}" "$pad_sp" "$C_CYAN" "$C_RESET"
+                printf '\r\033[2K  \033[38;2;0;212;255m%s\033[0m %s...' "${spinners[$index]}" "${display_text}"
                 index=$(((index + 1) % ${#spinners[@]}))
                 sleep 0.08
             done
         ) >&2 &
         PGY_PROGRESS_PID=$!
     else
-        pgy_row "  [..] ${display_text}..." "$C_CYAN"
+        echo -e "  ${C_CYAN}[..]${C_RESET} ${display_text}..."
     fi
 }
 tdz_progress_begin() { pgy_progress_begin "$@"; }
@@ -435,7 +424,7 @@ pgy_progress_done() {
         PGY_PROGRESS_PID=""
     fi
     printf '\r\033[2K\033[?25h' 2>/dev/null || true
-    pgy_row "$(printf "${C_GREEN}[✓]${C_RESET} %s" "$text")" "$C_CYAN"
+    echo -e "  ${C_GREEN}[✓]${C_RESET} ${text}"
 }
 tdz_progress_done() { pgy_progress_done "$@"; }
 
@@ -447,7 +436,7 @@ pgy_progress_failed() {
         PGY_PROGRESS_PID=""
     fi
     printf '\r\033[2K\033[?25h' 2>/dev/null || true
-    pgy_row "$(printf "${C_RED}[✗]${C_RESET} %s" "$text")" "$C_CYAN"
+    echo -e "  ${C_RED}[✗]${C_RESET} ${text}"
 }
 tdz_progress_failed() { pgy_progress_failed "$@"; }
 
@@ -459,24 +448,11 @@ pgy_progress_finish() {
         PGY_PROGRESS_PID=""
     fi
     printf '\r\033[2K\033[?25h' 2>/dev/null || true
-    if [[ "${PGY_CURRENT_BOX_OPEN:-false}" == "true" ]]; then
-        pgy_box_divider "$C_CYAN"
-        if [[ "$success" == "true" ]]; then
-            pgy_row "$(printf "${C_GREEN}[OK]${C_RESET} %s" "$message")" "$C_CYAN"
-        else
-            pgy_row "$(printf "${C_RED}[FAIL]${C_RESET} %s" "$message")" "$C_CYAN"
-        fi
-        pgy_box_bot "$C_CYAN"
-        PGY_CURRENT_BOX_OPEN=false
+    pgy_box_close_if_open
+    if [[ "$success" == "true" ]]; then
+        echo -e "\n  ${C_GREEN}[OK]${C_RESET} ${message}"
     else
-        echo
-        pgy_box_top "$C_CYAN"
-        if [[ "$success" == "true" ]]; then
-            pgy_row "$(printf "${C_GREEN}[OK]${C_RESET} %s" "$message")" "$C_CYAN"
-        else
-            pgy_row "$(printf "${C_RED}[FAIL]${C_RESET} %s" "$message")" "$C_CYAN"
-        fi
-        pgy_box_bot "$C_CYAN"
+        echo -e "\n  ${C_RED}[FAIL]${C_RESET} ${message}"
     fi
 }
 tdz_progress_finish() { pgy_progress_finish "$@"; }

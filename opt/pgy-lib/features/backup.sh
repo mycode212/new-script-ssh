@@ -942,7 +942,7 @@ auto_backup_start() {
         press_enter; return
     fi
     echo
-    pgy_section "SERVICE PROGRESS"
+    echo -e "  ${C_CYAN}▶ SERVICE PROGRESS${C_RESET}"
     if ! pgy_progress_run 1 3 "Preparing service runtime" auto_backup_ensure_pm2; then
         pgy_message ERROR "The service runtime could not be prepared."
         press_enter
