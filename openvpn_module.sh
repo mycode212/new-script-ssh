@@ -1552,6 +1552,11 @@ pgy_openvpn_start_services() {
     mkdir -p "$(dirname "$PGY_OVPN_DIAG_LOG")" 2>/dev/null || true
     touch "$PGY_OVPN_DIAG_LOG" 2>/dev/null || true
     chmod 600 "$PGY_OVPN_DIAG_LOG" 2>/dev/null || true
+    pgy_openvpn_ensure_service_account >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+    pgy_openvpn_ensure_pki >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+    pgy_openvpn_prepare_gateway_certificate >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+    pgy_openvpn_apply_private_permissions >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
+    pgy_openvpn_write_systemd_units >>"$PGY_OVPN_DIAG_LOG" 2>&1 || true
     systemctl daemon-reload >>"$PGY_OVPN_DIAG_LOG" 2>&1
     systemctl enable pgy-openvpn-network.service >>"$PGY_OVPN_DIAG_LOG" 2>&1
     systemctl restart pgy-openvpn-network.service >>"$PGY_OVPN_DIAG_LOG" 2>&1
@@ -2404,12 +2409,17 @@ pgy_openvpn_restart_action() {
     pgy_openvpn_stop_services
     pgy_openvpn_progress_done
 
-    pgy_openvpn_progress_begin 2 4 "Validating configuration & runtime files"
-    if pgy_openvpn_validate_runtime_files; then
-        pgy_openvpn_progress_done
-    else
+    pgy_openvpn_progress_begin 2 4 "Preparing certificates & validating configuration"
+    pgy_openvpn_ensure_service_account >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_ensure_pki >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_prepare_gateway_certificate >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_apply_private_permissions >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_write_systemd_units >>"$PGY_OVPN_DIAG_LOG" 2>&1 || failed=true
+    $failed || pgy_openvpn_validate_runtime_files || failed=true
+    if $failed; then
         pgy_openvpn_progress_failed
-        failed=true
+    else
+        pgy_openvpn_progress_done
     fi
 
     if ! $failed; then

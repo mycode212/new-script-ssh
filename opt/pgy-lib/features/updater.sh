@@ -53,11 +53,10 @@ show_script_update_box_if_available() {
 
 update_script() {
     clear; show_banner
-    pgy_screen_title "UPDATE SCRIPT" "Memperbarui modul dan binary script ProgoCloud"
+    echo
 
     if [[ $EUID -ne 0 ]]; then
-        echo
-        pgy_message ERROR "Update script harus dijalankan sebagai root."
+        echo -e "${C_RED}[ERROR] Update script harus dijalankan sebagai root.${C_RESET}"
         press_enter
         return 1
     fi
@@ -91,46 +90,36 @@ update_script() {
     # Check if update is needed
     if [[ "$force_mode" == false ]]; then
         if [[ -z "$remote_ver" ]]; then
+            echo -e "  ${C_YELLOW}▶ CEK PEMBARUAN SCRIPT${C_RESET}"
+            echo -e "  ${C_RED}[ERROR] Gagal memeriksa versi terbaru dari server repository.${C_RESET}"
+            echo -e "  ${C_GRAY}Versi lokal saat ini : ${C_WHITE}${local_ver}${C_RESET}"
+            echo -e "  ${C_GRAY}Gunakan ${C_YELLOW}pgy-update --force${C_GRAY} jika ingin melakukan update paksa.${C_RESET}"
             echo
-            pgy_box_top "$C_YELLOW"
-            pgy_box_header "CEK PEMBARUAN SCRIPT" "$C_YELLOW"
-            pgy_box_divider "$C_YELLOW"
-            pgy_detail "Versi Saat Ini" "$local_ver" "$C_YELLOW"
-            pgy_detail "Status Server" "Koneksi ke repository gagal" "$C_YELLOW"
-            pgy_box_divider "$C_YELLOW"
-            pgy_row "Gagal memeriksa versi terbaru dari server repository." "$C_YELLOW"
-            pgy_row "Gunakan: pgy-update --force jika ingin update paksa." "$C_YELLOW"
-            pgy_box_bot "$C_YELLOW"
             press_enter
             return 0
         fi
 
         if ! pgy_is_newer_version "$remote_ver" "$local_ver"; then
+            echo -e "  ${C_CYAN}▶ CEK PEMBARUAN SCRIPT${C_RESET}"
+            echo -e "  ${C_GREEN}[✓] Script sudah menggunakan versi terbaru: ${C_WHITE}${C_BOLD}${local_ver}${C_RESET}"
+            echo -e "  ${C_GRAY}Tidak ada pembaruan baru yang tersedia saat ini.${C_RESET}"
+            echo -e "  ${C_GRAY}Ketik ${C_YELLOW}pgy-update --force${C_GRAY} untuk update paksa / reinstall.${C_RESET}"
             echo
-            pgy_box_top "$C_GREEN"
-            pgy_box_header "SCRIPT SUDAH UP-TO-DATE" "$C_GREEN" "$C_GREEN"
-            pgy_box_divider "$C_GREEN"
-            pgy_detail "Versi Saat Ini" "$local_ver" "$C_GREEN"
-            pgy_detail "Versi Server" "$remote_ver" "$C_GREEN"
-            pgy_detail "Status" "Versi Terbaru (Up-to-Date)" "$C_GREEN"
-            pgy_box_divider "$C_GREEN"
-            pgy_row "Tidak ada pembaruan baru yang tersedia saat ini." "$C_GREEN"
-            pgy_row "Ketik pgy-update --force untuk update paksa / reinstall." "$C_GREEN"
-            pgy_box_bot "$C_GREEN"
             press_enter
             return 0
         fi
     fi
 
-    echo
-    pgy_box_top "$C_CYAN"
-    pgy_box_header "PROSES PEMBARUAN" "$C_CYAN"
-    pgy_box_divider "$C_CYAN"
-    pgy_row "[1/3] Memeriksa validasi lisensi VPS... [OK]" "$C_CYAN"
+    echo -e "  ${C_CYAN}▶ MEMPERBARUI SCRIPT PROGOCLOUD${C_RESET}"
+
+    pgy_progress_begin 1 4 "Memeriksa validasi lisensi VPS"
+    sleep 0.3
+    pgy_progress_done
+
     if [[ "$force_mode" == true ]]; then
-        pgy_row "[2/3] Mengunduh berkas script (Force Reinstall: ${local_ver})..." "$C_CYAN"
+        pgy_progress_begin 2 4 "Mengunduh berkas script (Force Reinstall: ${local_ver})"
     else
-        pgy_row "[2/3] Mengunduh pembaruan (${local_ver} -> ${remote_ver})..." "$C_CYAN"
+        pgy_progress_begin 2 4 "Mengunduh pembaruan (${local_ver} -> ${remote_ver})"
     fi
 
     local work_dir
@@ -157,15 +146,15 @@ update_script() {
     fi
 
     if [[ "$download_ok" == false || ! -d "${src_dir}/opt/pgy-lib" || ! -f "${src_dir}/menu.sh" ]]; then
-        pgy_row "[!] Gagal mengunduh berkas pembaruan." "$C_RED"
-        pgy_box_bot "$C_RED"
+        pgy_progress_failed
         echo
-        pgy_message ERROR "Gagal mengunduh atau struktur pembaruan tidak lengkap."
+        echo -e "  ${C_RED}[ERROR] Gagal mengunduh atau struktur pembaruan tidak lengkap.${C_RESET}"
         press_enter
         return 1
     fi
+    pgy_progress_done
 
-    pgy_row "[3/3] Menyinkronkan seluruh modul dan layanan..." "$C_CYAN"
+    pgy_progress_begin 3 4 "Menyinkronkan modul dan berkas binary"
     mkdir -p /pgy-lib/opt "${PGY_LIB_DIR}" "${DB_DIR}"
 
     # Perform atomic sync of modules to /pgy-lib/opt and /usr/local/lib/pgy-ssh-tunnel
@@ -227,6 +216,10 @@ update_script() {
 EOF
     chmod 755 /usr/local/bin/pgy-update
 
+    pgy_progress_done
+
+    pgy_progress_begin 4 4 "Memverifikasi dan memuat ulang layanan"
+
     # Restart core tunnel services if running to apply changes
     systemctl is-active --quiet pgytunnel-limiter 2>/dev/null && systemctl restart pgytunnel-limiter >/dev/null 2>&1 || true
     systemctl is-active --quiet pgy-ws-ssh-bridge 2>/dev/null && systemctl restart pgy-ws-ssh-bridge >/dev/null 2>&1 || true
@@ -238,20 +231,14 @@ EOF
         refresh_dynamic_banner_routing_if_enabled >/dev/null 2>&1 || true
     fi
 
-    pgy_box_bot "$C_CYAN"
+    pgy_progress_done
 
     local new_ver
     new_ver="$(get_pgy_installed_version 2>/dev/null || echo "${remote_ver:-0.1.1}")"
 
     echo
-    pgy_box_top "$C_GREEN"
-    pgy_box_header "UPDATE BERHASIL" "$C_GREEN" "$C_GREEN"
-    pgy_box_divider "$C_GREEN"
-    pgy_detail "Status" "Berhasil Diperbarui" "$C_GREEN"
-    pgy_detail "Versi Aktif" "$new_ver" "$C_GREEN"
-    pgy_box_divider "$C_GREEN"
-    pgy_row "${C_GRAY}Memuat ulang menu console dalam 2 detik...${C_RESET}" "$C_GREEN"
-    pgy_box_bot "$C_GREEN"
+    echo -e "  ${C_GREEN}${C_BOLD}[OK] Pembaruan script berhasil ke versi ${new_ver}!${C_RESET}"
+    echo -e "  ${C_GRAY}Memuat ulang menu console dalam 2 detik...${C_RESET}"
     echo
     sleep 2
     exec /usr/local/bin/menu
