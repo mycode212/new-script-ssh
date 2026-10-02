@@ -146,15 +146,23 @@ api_management_menu() {
                 ;;
             6)
                 clear; show_banner
-                pgy_screen_title "API TESTING & INTEGRATION" "Dokumentasi cURL & status respon endpoint lokal"
+                pgy_screen_title "API TESTING & INTEGRATION" "Dokumentasi cURL & status respon endpoint API"
                 echo
-                pgy_progress_begin 1 1 "Menguji endpoint http://127.0.0.1:${api_port}/api/v1/system/status"
+                pgy_progress_begin 1 1 "Menguji koneksi internal API daemon"
                 local test_ok=false
                 if pgy_api_test_local; then
                     test_ok=true
                 fi
                 pgy_progress_done
                 echo
+
+                local api_host=""
+                if declare -F detect_preferred_host >/dev/null 2>&1; then
+                    api_host=$(detect_preferred_host 2>/dev/null || echo "")
+                fi
+                if [[ -z "$api_host" ]]; then
+                    api_host=$(curl -s -4 icanhazip.com 2>/dev/null || echo "127.0.0.1")
+                fi
 
                 pgy_box_top "$C_CYAN"
                 pgy_box_header "HASIL UJI KONEKSI API" "$C_CYAN" "$C_CYAN"
@@ -165,14 +173,14 @@ api_management_menu() {
                     pgy_row "$(printf "${C_RED}✖ API Service tidak merespons (Pastikan service AKTIF).${C_RESET}")" "$C_CYAN"
                 fi
                 pgy_box_divider "$C_CYAN"
-                pgy_row "$(printf "${C_CYAN}Endpoint Status VPS:${C_RESET}")" "$C_CYAN"
-                pgy_row "$(printf "${C_WHITE}curl -s -H 'X-API-Key: %s' http://127.0.0.1:%s/api/v1/system/status${C_RESET}" "$api_key" "$api_port")" "$C_CYAN"
+                pgy_row "$(printf "${C_CYAN}Endpoint Status VPS (GET):${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}curl -s -H 'X-API-Key: %s' http://%s:%s/api/v1/system/status${C_RESET}" "$api_key" "$api_host" "$api_port")" "$C_CYAN"
                 pgy_box_divider "$C_CYAN"
-                pgy_row "$(printf "${C_CYAN}Endpoint Buat User SSH:${C_RESET}")" "$C_CYAN"
+                pgy_row "$(printf "${C_CYAN}Endpoint Buat User SSH (POST):${C_RESET}")" "$C_CYAN"
                 pgy_row "$(printf "${C_WHITE}curl -s -X POST -H 'Content-Type: application/json' \\${C_RESET}")" "$C_CYAN"
                 pgy_row "$(printf "${C_WHITE}  -H 'X-API-Key: %s' \\${C_RESET}" "$api_key")" "$C_CYAN"
                 pgy_row "$(printf "${C_WHITE}  -d '{\"username\":\"testuser\",\"password\":\"pass123\",\"days\":30}' \\${C_RESET}")" "$C_CYAN"
-                pgy_row "$(printf "${C_WHITE}  http://127.0.0.1:%s/api/v1/user/create${C_RESET}" "$api_port")" "$C_CYAN"
+                pgy_row "$(printf "${C_WHITE}  http://%s:%s/api/v1/user/create${C_RESET}" "$api_host" "$api_port")" "$C_CYAN"
                 pgy_box_bot "$C_CYAN"
                 echo
                 press_enter

@@ -269,6 +269,19 @@ def get_public_ip_and_domain() -> Tuple[str, str]:
         except Exception:
             pass
 
+    if not domain:
+        edge_cert_file = Path(os.environ.get("PGY_EDGE_CERT_FILE", "/etc/pgytunnel/edge_cert.conf"))
+        if edge_cert_file.is_file():
+            try:
+                for line in edge_cert_file.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("EDGE_DOMAIN="):
+                        val = line.split("=", 1)[1].strip().strip('"\'')
+                        if val:
+                            domain = val
+                            break
+            except Exception:
+                pass
+
     public_ip = os.environ.get("PGY_TEST_IP", "")
     if not public_ip:
         try:
