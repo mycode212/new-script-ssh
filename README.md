@@ -107,7 +107,7 @@ Sebelum menggunakan dan mengonfigurasi layanan di VPS Anda, perhatikan poin-poin
 ### 1. Integrasi Cloudflare DNS & Proxy
 - **Untuk SSH WebSocket CDN / Bug Kuota (Port 80 & 443):**
   - Subdomain di Cloudflare **WAJIB berstatus Proxied (Awan Oranye)**.
-  - Di dashboard Cloudflare: Masuk ke **Network** $\rightarrow$ Pastikan opsi **WebSockets** bernilai **ON (Enabled)**.
+  - Di dashboard Cloudflare: Masuk ke **Network** → Pastikan opsi **WebSockets** bernilai **ON (Enabled)**.
 - **Untuk Portal OpenVPN (Port 1180):**
   - Cloudflare CDN gratisan tidak mendukung port non-standar `:1180`.
   - **Solusi Rekomendasi:**
@@ -116,7 +116,7 @@ Sebelum menggunakan dan mengonfigurasi layanan di VPS Anda, perhatikan poin-poin
 
 ### 2. Pengaturan Port Edge (HAProxy)
 - Secara default, Edge HTTP/TLS berada di port `2080` & `442`. Jika Anda ingin menggunakan port standar `80` & `443` untuk WebSocket/CDN:
-  - Buka `menu` $\rightarrow$ **[ 5] Protocol Gateway & Edge Settings** $\rightarrow$ Pilih **Change Public Edge Ports** ke `80` & `443`.
+  - Buka `menu` → **[ 5] Protocol Gateway & Edge Settings** → Pilih **Change Public Edge Ports** ke `80` & `443`.
 - **PENTING:** Jangan mengubah port OpenVPN menjadi 80 atau 443 jika Edge HAProxy aktif pada port tersebut, karena akan terjadi bentrok (*port collision*).
 
 ### 3. Hak Akses VPS
@@ -177,7 +177,7 @@ Pembaruan modul script dapat dilakukan kapan saja secara otomatis tanpa menghapu
 ```bash
 pgy-update
 ```
-*atau melalui antarmuka **`menu` $\rightarrow$ `[23] Update Script`**.*
+*atau melalui antarmuka **`menu` → `[23] Update Script`**.*
 
 Pembaruan menggunakan sistem **borderless animated spinner** yang transparan, cepat, dan aman.
 
